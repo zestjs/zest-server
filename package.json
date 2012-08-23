@@ -1,0 +1,15 @@
+{
+  "name": "zest-server",
+  "description": "Component render server",
+  "version": "0.0.1",
+  "author": "Guy Bedford <guybedford@gmail.com>",
+  "main": "./zest-server.js",
+  "dependencies": {
+    "requirejs": ">=2.0.2",
+    "volo": ">=0.2.1",
+    "node-static": ">=0.5.9"
+  },
+  "scripts": {
+    "install": "volo add zestjs/zest"
+  }
+}
