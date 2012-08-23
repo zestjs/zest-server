@@ -3,6 +3,10 @@
   "description": "Component render server",
   "version": "0.0.1",
   "author": "Guy Bedford <guybedford@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zestjs/zest-server"
+  },
   "main": "./zest-server.js",
   "dependencies": {
     "requirejs": ">=2.0.2",
