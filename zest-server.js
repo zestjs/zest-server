@@ -18,64 +18,53 @@ var $z = exports;
 var fileServer = null;
 
 var defaultConfig = {
-  serveStatic: true,
-  clientConfig: {
-    map: {
-      '*': {
-        attach: 'zest/attach',
-        css: 'require-css/css',
-        selector: 'require-selector/main',
-        is: 'require-is/is'
-      }
-    },
-    paths: {
-    },
+  mode: 'dev',
+  appDir: 'www',
+  dynamicLibPrefix: 'dlib',
+  
+  require: {
     config: {
-      'require-is/is': {
+      is: {
         client: true,
         render: true,
         node: false
       }
     }
   },
-  serverConfig: {
+  
+  server: {
+    context: 'shared',
+    nodeRequire: require,
     config: {
-      'require-is/is': {
+      is: {
         client: false,
         render: true,
         node: true
       }
     }
-  },
-  buildConfig: {
   }
 };
   
   
-$z.loadConfig = function(config, complete) {
+$z.setConfig = function(config, complete) {
     
-  //load configurations
+  //load configuration
   if (typeof config == 'string')
     return $z.loadConfig(eval(fs.readFileSync(config, 'utf-8')), complete);
   
-  if (typeof config.buildConfig == 'string')
-    config.buildConfig = eval(fs.readFileSync(config.buildConfig, 'utf-8'));
+  //load requirejs configurations from files if necessary
+  var loadConfig = function(prop) {
+    if (typeof config[prop] == 'string')
+      config[prop] = eval('var c,require=function(o){return typeof o=="object"?c=o:c;}var requirejs=require.config=require;' +
+        fs.readFileSync(config[prop], 'utf-8'));
+  }
   
-  if (!config.buildConfig || !config.buildConfig.appDir || !config.buildConfig.dir)
-    throw 'You must provide a valid requirejs build config, with the "appDir" and "dir" specified.';
+  loadConfig('require');
   
-  if (typeof config.serverConfig == 'string')
-    config.serverConfig = eval(fs.readFileSync(config.serverConfig, 'utf-8'));
-  
-  if (config.buildConfig.mainConfigFile && config.clientConfig)
-    throw 'There is a "mainConfigFile" in the buildConfig and a "clientConfig" in the zest configuration. You must use one or the other.';
-  
-  if (config.buildConfig.mainConfigFile)
-    config.clientConfig = config.buildConfig.mainConfigFile;
-  
-  if (typeof config.clientConfig == 'string')
-    config.clientConfig = eval('var c,require=function(o){return typeof o=="object"?c=o:c;}var requirejs=require.config=require;' +
-      fs.readFileSync(config.clientConfig, 'utf-8'));
+  loadConfig('client');
+  loadConfig('build');
+  loadConfig('server');
+  loadConfig('production');
   
   
   function deepUnderwrite(a, b) {
@@ -89,29 +78,21 @@ $z.loadConfig = function(config, complete) {
     }
   }
   
-  //provide default requirejs config
-  deepUnderwrite(config.clientConfig, defaultConfig.clientConfig);
+  //provide default configuration
+  deepUnderwrite(config, defaultConfig);
   
-  deepUnderwrite(config.serverConfig, defaultConfig.serverConfig);
-  deepUnderwrite(config.serverConfig, config.clientConfig);
+  //derive client, build, server and production configs
+  deepUnderwrite(config.client, config.require);
+  deepUnderwrite(config.server, config.require);
+  deepUnderwrite(config.build, config.require);
+  deepUnderwrite(config.production, config.require);
   
-  deepUnderwrite(config.buildConfig, defaultConfig.buildConfig);
-  deepUnderwrite(config.buildConfig, config.clientConfig);
+  //set server baseUrl if not already
+  config.server.baseUrl = config.buildConfig.appDir + '/' + config.buildConfig.baseUrl;
   
-  //set base url from build config
-  config.serverConfig.baseUrl = config.buildConfig.appDir + '/' + config.buildConfig.baseUrl;
-  config.serverConfig.config = config.serverConfig.config || {};
-  //config.serverConfig.config.zest = config.serverConfig.config.zest || {};
-  //config.serverConfig.config.zest.client = false;
+  $z.require = requirejs.config(config.server);
   
-  //Setup requirejs
-  config.serverConfig.context = 'shared';
-  
-  config.serverConfig.nodeRequire = require;
-  
-  $z.require = requirejs.config(config.serverConfig);
-  
-  $z.require(['zest/com', 'css', 'attach'], function(z, css, attach) {
+  $z.require(['zest', 'css', 'zest/attach'], function(z, css, attach) {
   
     $z.css = css;
     $z.attach = attach;
@@ -148,10 +129,9 @@ $z.loadConfig = function(config, complete) {
     $z.Page = $z.creator($z.Page);
     
     //prepare file server
-    if ($z.config.serveStatic)
-      fileServer = new nodeStatic.Server('./' + ($z.config.production ? $z.config.buildConfig.dir : $z.config.buildConfig.appDir), {
-        cache: $z.config.production ? 3600 : 0
-      });
+    fileServer = new nodeStatic.Server('./' + ($z.config.mode == 'production' ? $z.config.appDir + '/' + $z.config.production.baseUrl : $z.config.appDir + '/' + $z.config.client.baseUrl), {
+      cache: $z.config.mode == 'production' ? 3600 : 0
+    });
 
     complete();
     
@@ -159,7 +139,7 @@ $z.loadConfig = function(config, complete) {
 };
   
 $z.build = function(complete) {
-  requirejs.optimize($z.config.buildConfig, function(buildResponse) {
+  requirejs.optimize($z.config.build, function(buildResponse) {
     $z.log(buildResponse);
     complete();
   });
@@ -235,11 +215,11 @@ $z.render = function(moduleId, options, res) {
  * 
  */
 $z.serveResources = function(req, res, next) {
-  if (!$z.config.buildConfig)
+  if (!$z.config)
     throw 'You must first use $z.loadConfig to set configuration before serving resources.';
   
   //serve dynamically generated resources
-  if (req.url.substr(0, 1 + $z.config.dynamicResources.urlPrefix.length) == '/' + $z.config.dynamicResources.urlPrefix) {
+  if (req.url.substr(0, 1 + $z.config.dynamicLibPrefix.length) == '/' + $z.config.dynamicLibPrefix) {
 
     var rName = req.url;
   
@@ -297,8 +277,8 @@ $z.render.createResourceStreams = function(structureId, options, includedModules
   hash.update(JSON.stringify(options), 'utf-8');
   hash = hash.digest('hex');
   
-  var cssUrl = '/' + $z.config.dynamicResources.urlPrefix + '/' + structureId + '/' + hash + '.css';
-  var jsUrl = '/' + $z.config.dynamicResources.urlPrefix + '/' + structureId + '/' + hash + '.js';
+  var cssUrl = '/' + $z.config.dynamicLibPrefix + '/' + structureId + '/' + hash + '.css';
+  var jsUrl = '/' + $z.config.dynamicLibPrefix + '/' + structureId + '/' + hash + '.js';
   
   var cssStream, jsStream;
   
@@ -325,10 +305,10 @@ $z.render.createResourceStreams = function(structureId, options, includedModules
     jsStream = { url: jsUrl };
   
   //do generation
-  if ($z.config.production) {
+  if ($z.config.mode == 'production') {
     //run a build for script and css
     
-    var renderConfig = $z.copy($z.config.buildConfig);
+    var renderConfig = $z.copy($z.config.build);
     delete renderConfig.modules;
     renderConfig.name = structureId;
     //renderConfig.exclude = includedModules;
@@ -341,8 +321,8 @@ $z.render.createResourceStreams = function(structureId, options, includedModules
     delete renderConfig.appDir;
     delete renderConfig.dir;
     renderConfig.baseUrl = 'www/' + renderConfig.baseUrl;
-    renderConfig.config['require-is/is'] = $z.copy(renderConfig.config['require-is/is']);
-    renderConfig.config['require-is/is'].node = false;
+    renderConfig.config.is = $z.copy(renderConfig.config.is);
+    renderConfig.config.is.node = false;
     renderConfig.isExclude = (renderConfig.isExclude || []).concat(['node']);
     //requirejs.optimize(renderConfig);
     
@@ -439,12 +419,12 @@ $z.loadAttachScript = function() {
   
   var path;
   if ($z.config.isBuild)
-    path = $z.config.buildConfig.dir;
+    path = $z.config.build.dir;
   else
-    path = $z.config.buildConfig.appDir;
+    path = $z.config.appDir;
     
-  path += '/' + $z.config.clientConfig.baseUrl;
-  path += '/' + $z.config.clientConfig.map['*'].zest;
+  path += '/' + $z.config.client.baseUrl;
+  path += '/' + $z.config.client.map['*'].zest || 'zest';
   path = path.substr(0, path.length - 4);
   path += 'attachment.js';
   
@@ -589,9 +569,9 @@ $z.Page = {
     return '<!doctype html> \n' +
       '<html> \n' + 
       '<head> \n' +
-      '  <script type="text/javascript" data-main="' + ($z.config.main || '') + '" src="' + $z.config.requireJS + '"></script> \n' +
+      '  <script type="text/javascript" data-main="' + (o.main || '') + '" src="' + $z.config.mode == 'production' ? $z.config.production.baseUrl : $z.config.client.baseUrl + '/require.js"></script> \n' +
       '  <script type="text/javascript"> \n' +
-      '    require.config(' + JSON.stringify($z.config.clientConfig) + '); \n' +
+      '    require.config(' + JSON.stringify($z.config.mode == 'production' ? $z.config.production : $z.config.client) + '); \n' +
       '    ' + $z.loadAttachScript() + ' \n' + 
       '  </script> \n' +
       '  <link rel="stylesheet" type="text/css" href="' + o.cssStream + '"></link>' +

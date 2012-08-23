@@ -10,6 +10,6 @@
     "node-static": ">=0.5.9"
   },
   "scripts": {
-    "install": "volo add zestjs/zest"
+    "install": "node ./scripts/install.js"
   }
 }
