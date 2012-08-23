@@ -1,6 +1,6 @@
 {
   "name": "zest-server",
-  "description": "Component render server",
+  "description": "Server-side component rendering",
   "version": "0.0.1",
   "author": "Guy Bedford <guybedford@gmail.com>",
   "repository": {
@@ -10,13 +10,6 @@
   "main": "./zest-server.js",
   "dependencies": {
     "requirejs": ">=2.0.2",
-    "volo": ">=0.2.1",
     "node-static": ">=0.5.9"
-  },
-  "engines": {
-    "node": ">=0.8.8"
-  },
-  "scripts": {
-    "install": "node scripts/install.js"
   }
 }
