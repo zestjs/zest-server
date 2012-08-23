@@ -1,10 +1,11 @@
 var fs = require('fs'),
   volo = require('volo');
 
-var basePath = __dirname + '/../../../';
+process.chdir('../../');
+basePath = __dirname + '/../../../';
 
 //load package.json
-var p = eval('(' + fs.readFileSync(basePath + 'package.json', 'utf-8') + ')');
+var p = fs.existsSync(basePath + 'package.json') ? eval('(' + fs.readFileSync(basePath + 'package.json', 'utf-8') + ')') : {};
 
 //check amd.baseUrl, if not set to www/lib
 p.amd = p.amd || {};

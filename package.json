@@ -13,7 +13,10 @@
     "volo": ">=0.2.1",
     "node-static": ">=0.5.9"
   },
+  "engines": {
+    "node": ">=0.8.8"
+  },
   "scripts": {
-    "install": "node ./scripts/install.js"
+    "install": "node scripts/install.js"
   }
 }
