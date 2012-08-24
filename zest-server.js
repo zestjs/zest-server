@@ -23,6 +23,7 @@ var defaultConfig = {
   dynamicLibPrefix: 'dlib',
   
   require: {
+    baseUrl: 'lib',
     config: {
       is: {
         client: true,
@@ -42,7 +43,10 @@ var defaultConfig = {
         node: true
       }
     }
-  }
+  },
+  client: {},
+  production: {},
+  build: {}
 };
   
   
@@ -88,7 +92,7 @@ $z.setConfig = function(config, complete) {
   deepUnderwrite(config.production, config.require);
   
   //set server baseUrl if not already
-  config.server.baseUrl = config.buildConfig.appDir + '/' + config.buildConfig.baseUrl;
+  config.server.baseUrl = config.appDir + '/' + config.server.baseUrl;
   
   $z.require = requirejs.config(config.server);
   
@@ -129,7 +133,7 @@ $z.setConfig = function(config, complete) {
     $z.Page = $z.creator($z.Page);
     
     //prepare file server
-    fileServer = new nodeStatic.Server('./' + ($z.config.mode == 'production' ? $z.config.appDir + '/' + $z.config.production.baseUrl : $z.config.appDir + '/' + $z.config.client.baseUrl), {
+    fileServer = new nodeStatic.Server($z.config.appDir, {
       cache: $z.config.mode == 'production' ? 3600 : 0
     });
 
@@ -249,11 +253,9 @@ $z.serveResources = function(req, res, next) {
     return;
   }
   
-  if ($z.config.serveStatic) {
-    fileServer.serve(req, res).addListener('error', function (err) {
-      $z.log("Error serving " + req.url + " - " + err.message);
-    });
-  }
+  fileServer.serve(req, res).addListener('error', function (err) {
+    $z.log("Error serving " + req.url + " - " + err.message);
+  });
 }
 
 
@@ -569,7 +571,7 @@ $z.Page = {
     return '<!doctype html> \n' +
       '<html> \n' + 
       '<head> \n' +
-      '  <script type="text/javascript" data-main="' + (o.main || '') + '" src="' + $z.config.mode == 'production' ? $z.config.production.baseUrl : $z.config.client.baseUrl + '/require.js"></script> \n' +
+      '  <script type="text/javascript" data-main="' + (o.main || '') + '" src="/' + ($z.config.mode == 'production' ? $z.config.production.baseUrl : $z.config.client.baseUrl) + '/require.js"></script> \n' +
       '  <script type="text/javascript"> \n' +
       '    require.config(' + JSON.stringify($z.config.mode == 'production' ? $z.config.production : $z.config.client) + '); \n' +
       '    ' + $z.loadAttachScript() + ' \n' + 
