@@ -131,6 +131,9 @@ $z.setConfig = function(config, complete) {
     $z.overwrite($z.config, config);
     
     $z.Page = $z.creator($z.Page);
+    $z.Page._definition._extend = {
+      body: $z.extend
+    };
     
     //prepare file server
     fileServer = new nodeStatic.Server($z.config.appDir, {
