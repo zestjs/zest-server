@@ -303,8 +303,9 @@ $z.render = function(structure, htmlTemplate, options, res) {
   if (arguments.length != 4) {
     res = options;
     options = htmlTemplate;
-    htmlTemplate = $z.HTML;
+    htmlTemplate = 'cs!zest/html';
   }
+  htmlTemplate = htmlTemplate || 'cs!zest/html';
   
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html');
@@ -343,18 +344,13 @@ $z.render = function(structure, htmlTemplate, options, res) {
       
       body: options,
       title: structure.title,
+      deferTitle: structure.deferTitle,
       
       requireConfig: $z.config.mode == 'production' ? $z.config.production : $z.config.client,
       
       appId: options.appId,
-      global: options.global,
-      
-      // document.title load binding
-      onTitle: function(setTitle) { 
-        options.setTitle = setTitle;
-      }
+      global: options.global
     };
-    
     $z.render.renderItem(htmlTemplate, htmlOptions, write, complete);
   }
   
