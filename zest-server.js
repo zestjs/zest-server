@@ -28,7 +28,7 @@ var defaultConfig = {
   require: {
     baseUrl: 'lib',
     config: {
-      'is/main': {
+      'is/is': {
         client: true,
         render: true,
         node: false
