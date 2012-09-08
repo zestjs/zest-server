@@ -10,7 +10,8 @@ var path = require('path'),
   fs = require('fs'),
   crypto = require('crypto'),
   nodeStatic = require('node-static'),
-  requirejs = require('requirejs');
+  requirejs = require('requirejs'),
+  http = require('http');
   
 var $z = exports;
   
@@ -21,11 +22,13 @@ var defaultConfig = {
   mode: 'dev',
   appDir: 'www',
   dynamicLibPrefix: 'dlib',
+  serveFiles: true,
+  explicitAttachment: true,
   
   require: {
     baseUrl: 'lib',
     config: {
-      is: {
+      'is/main': {
         client: true,
         render: true,
         node: false
@@ -37,20 +40,118 @@ var defaultConfig = {
     context: 'shared',
     nodeRequire: require,
     config: {
-      is: {
+      'is/main': {
         client: false,
         render: true,
         node: true
       }
+    },
+    paths: {
+      '@': '../..'
     }
   },
   client: {},
   production: {},
   build: {}
 };
+
+$z.serveApp = function(appId) {
+  var app;
+  if (typeof appId == 'string')
+    $z.require([appId], function(_app) {
+      app = _app;
+    });
+  else
+    app = appId;
   
+  return function(req, res, next) {
+    if (!app) {
+      $z.serveResources(req, res, next);
+      return;
+    }
   
-$z.setConfig = function(config, complete) {
+    //create render options
+    
+    var pageOptions = {
+      method: req.method,
+      url: req.url,
+      appId: appId
+    };
+    
+    var routeData = app.getRoute(pageOptions);
+    
+    req.options = req.options || {};
+    routeData.global = req.options;
+    
+    //create the http service for this cookie (session) and port
+    req.options.httpService = {
+      req: function(method, url, data, callback) {
+        if (typeof data == 'function') {
+          callback = data;
+          data = {};
+        }
+        var _data = [];
+        var str_data = JSON.stringify(data);
+        var _req = http.request({
+          hostname: 'localhost',
+          path: url,
+          port: parseInt(req.headers.host.split(':').pop()) || 80,
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': str_data.length,
+            'Cookie': req.headers.cookie
+          }
+        }, function(_res) {
+          _res.setEncoding('utf8');
+          _res.on('data', function (chunk) {
+            _data.push(chunk);
+          });
+          _res.on('end', function() {
+            try {
+              _data = JSON.parse(_data.join(''));
+            }
+            catch (e) {
+              callback('Unable to parse JSON response.', true);
+              return;
+            }
+            callback(_data);
+          });
+        });
+        _req.on('error', function(e) {
+          callback('Connection error', true);
+        });
+        _req.end(str_data);
+      },
+      get: function(url, data, callback) {
+        this.req('GET', url, data, callback);
+      },
+      post: function(url, data, callback) {
+        this.req('POST', url, data, callback);
+      },
+      put: function(url, data, callback) {
+        this.req('PUT', url, data, callback);
+      },
+      delete: function(url, data, callback) {
+        this.req('DELETE', url, data, callback);
+      }
+    };
+    
+    if (routeData)
+      $z.render(routeData.route, app.htmlTemplate, routeData, res);
+    
+    else
+      $z.serveResources(req, res, next);
+  }
+}
+
+
+$z.setConfig = function(config, requires, complete) {
+    
+  if (arguments.length == 2) {
+    complete = requires;
+    requires = [];
+  }
     
   //load configuration
   if (typeof config == 'string')
@@ -91,13 +192,17 @@ $z.setConfig = function(config, complete) {
   deepUnderwrite(config.build, config.require);
   deepUnderwrite(config.production, config.require);
   
+  //hack
+  config.client.baseUrl = '/' + config.client.baseUrl;
+  
   //set server baseUrl if not already
   config.server.baseUrl = config.appDir + '/' + config.server.baseUrl;
   
   $z.require = requirejs.config(config.server);
   
-  $z.require(['zest', 'css', 'zest/attach'], function(z, css, attach) {
+  $z.require(['zest', 'css', 'css/css.api', 'zest/attach'], function(z, css, cssApi, attach) {
   
+    $z.cssApi = cssApi;
     $z.css = css;
     $z.attach = attach;
     
@@ -130,17 +235,13 @@ $z.setConfig = function(config, complete) {
     $z.config = $z.config || {};
     $z.overwrite($z.config, config);
     
-    $z.Page = $z.creator($z.Page);
-    $z.Page._definition._extend = {
-      body: $z.extend
-    };
-    
     //prepare file server
-    fileServer = new nodeStatic.Server($z.config.appDir, {
-      cache: $z.config.mode == 'production' ? 3600 : 0
-    });
+    if ($z.config.serveFiles)
+      fileServer = new nodeStatic.Server($z.config.appDir, {
+        cache: $z.config.mode == 'production' ? 3600 : 0
+      });
 
-    complete();
+    $z.require(requires, complete);
     
   });
 };
@@ -155,6 +256,13 @@ $z.build = function(complete) {
 
 /*
  * $z.render server differences
+ *
+ * $z.render(Component, PageTemplate, options, response)
+ *
+ * If no PageTemplate provided, $z.HTML used by default
+ *
+ * options.appData is the 'global'
+ *
  *
  * String is returned instead of an array of DOM elements.
  *
@@ -191,14 +299,32 @@ $z.build = function(complete) {
  * This covers ALL the absolutely necessary meta for a managed dynamic script and CSS render.
  *
  */
-$z.render = function(moduleId, options, res) {
+$z.render = function(structure, htmlTemplate, options, res) {
+  if (arguments.length != 4) {
+    res = options;
+    options = htmlTemplate;
+    htmlTemplate = $z.HTML;
+  }
+  
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/html');
+  
+  if (typeof htmlTemplate == 'string') {
+    $z.require([htmlTemplate], function(htmlTemplate) {
+      $z.render(structure, htmlTemplate, options, res);
+    });
+    return;
+  }
+  
+  var streams;
+  if (typeof structure == 'string')
+    streams = $z.render.createResourceStreams(structure, options, options.includeModules || []);
+  else
+    streams = $z.render.createResourceStreams('inline', structure, options.includeModules || []);
+  
   var write = function(chunk) {
     res.write(chunk);
   }
-  
-  var streams = $z.render.createResourceStreams(moduleId, options, options.includeModules || []);
-  options.cssStream = streams.css.url;
-  options.jsStream = streams.js.url;
   
   var complete = function() {
     res.end();
@@ -208,9 +334,34 @@ $z.render = function(moduleId, options, res) {
       streams.js.end();
   }
   
-  $z.require([moduleId], function(structure) {
-    $z.render.renderItem(structure, options, write, complete);
-  });
+  var render = function(structure) {
+    options.component = structure;
+    var htmlOptions = {
+      // NB generalise 'cssStream' into something that can be used as an app.css global!
+      cssStream: streams.css.url,
+      jsStream: streams.js.url,
+      
+      body: options,
+      title: structure.title,
+      
+      requireConfig: $z.config.mode == 'production' ? $z.config.production : $z.config.client,
+      
+      appId: options.appId,
+      global: options.global,
+      
+      // document.title load binding
+      onTitle: function(setTitle) { 
+        options.setTitle = setTitle;
+      }
+    };
+    
+    $z.render.renderItem(htmlTemplate, htmlOptions, write, complete);
+  }
+  
+  if (typeof structure == 'string')
+    $z.require([structure], render);
+  else
+    render(structure);
 }
 
 /*
@@ -252,15 +403,58 @@ $z.serveResources = function(req, res, next) {
       res.writeHead(404, headers);
       res.end('Dynamic resource not available.');
     }
-    
-    return;
   }
-  
-  fileServer.serve(req, res).addListener('error', function (err) {
-    $z.log("Error serving " + req.url + " - " + err.message);
-  });
+  else
+    $z.serveFiles(req, res, next);
 }
 
+$z.serveFiles = function(req, res, next) {
+  if ($z.config.serveFiles) {
+    fileServer.serve(req, res).addListener('error', function (err) {
+      $z.log("Error serving " + req.url + " - " + err.message);
+    });
+  }
+  else
+    next();
+}
+
+$z.serveAPI = function(services) {
+  if (typeof services == 'string') {
+    var server;
+    $z.require([services], function(services) {
+      server = $z.serveAPI(services);
+    });
+    return function(req, res, next) {
+      if (server)
+        return server(req, res, next);
+      else
+        next();
+    };
+  }
+  return function(req, res, next) {
+    var detectUrl = req.url;
+    var contentType = req.headers['content-type'];
+    
+    if (req.url.substr(0, 5) == '/json')
+      detectUrl = req.url.substr(5);
+    
+    else if ((!contentType || contentType.substr(0, 16) != 'application/json') && req.method != 'GET') {
+      next();
+      return;
+    }
+    
+    //NB corresponding post version of '/json' shortcut
+    var method_services = services[req.method];
+    for (var s in method_services)
+      if (s == detectUrl) {
+        res.setHeader('Content-Type', 'application/json');
+        res.statusCode = 200;
+        method_services[s](req, res);
+        return;
+      }
+    next();
+  }
+}
 
 /*
  * $z.createResourceStreams
@@ -379,7 +573,7 @@ var ResourceStream = {
     },
     writeStreams: function(chunk) {
       for (var i = 0; i < this.streams.length; i++)
-        this.streams.write(chunk);
+        this.streams[i].write(chunk);
     },
     __attach: function(res) {
       this.streams.push(res);
@@ -392,6 +586,10 @@ var ResourceStream = {
       this.buffer += chunk;
     },
     __end: function(chunk) {
+      
+      this.buffer = this.buffer.replace($z.cssApi.buffer, '');
+      this.buffer += $z.cssApi.buffer;
+      
       if (typeof chunk == 'string') {
         this.endStreams(chunk);
         this.buffer += chunk;
@@ -406,38 +604,6 @@ var ResourceStream = {
     }
   }
 };
-
-var attachBuffer;
-$z.loadAttachScript = function() {
-  return '' + 
-  '$z=typeof $z!="undefined"?$z:function(){return $z.main.apply(this, arguments)};$z.attach=function(a,b,c){if(typeof a==="string")' +
-  '{a=[a];c=b;b=function(a){return a}}c=c||{};' +
-  'var d=Array.prototype.pop.call(document.getElementsByTagName("script"));var e=d;var f=[];while(e=e.previousSibling){f.unshift(e);' +
-  'if(e.nodeType==1&&e.getAttribute("component")&&!e.$z)break}d.parentNode.removeChild(d);$z.attach.attachments.push({$$:f,options:f,' +
-  'component:null});var g=$z.attach.attachments.length-1;require(a,function(){var a=b.apply(null,arguments);$z.attach.attachments[g].component=a;' +
-  '$z.attach.doAttach()})};$z.attach.attachments=[];$z.attach.curAttach=0;$z.attach.doAttach=function(){while(this.attachments[this.curAttach]&&' +
-  'this.attachments[this.curAttach].component){var a=this.attachments[this.curAttach];a.component.attach.call(a.component,a.$$,a.options);' +
-  'this.curAttach++}}';
-  
-  if (attachBuffer)
-    return attachBuffer;
-  
-  var path;
-  if ($z.config.isBuild)
-    path = $z.config.build.dir;
-  else
-    path = $z.config.appDir;
-    
-  path += '/' + $z.config.client.baseUrl;
-  path += '/' + $z.config.client.map['*'].zest || 'zest';
-  path = path.substr(0, path.length - 4);
-  path += 'attachment.js';
-  
-  attachBuffer = fs.readFileSync(path, 'utf-8');
-  
-  return attachBuffer;
-}
-
 
 $z.render.renderArray = function(structure, options, write, complete) {
   
@@ -489,6 +655,8 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
   // Render the template
   var html = typeof component.template == 'function' ? component.template(options) : component.template;
   
+  //if its a page template, don't bother with labelling
+  //if (!$z.inherits(component, $z.Page))
   html = this.labelComponent(html, options);
     
   //break up the regions into a render array
@@ -505,6 +673,9 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
           renderArray.splice(j + 1, 0, split[1]);
           
           var regionStructure = component[regionName] || options[regionName];
+          
+          delete options.id;
+          delete options.type;
           
           if (typeof regionStructure == 'function' && !regionStructure.template)
             regionStructure = regionStructure.call(component, options);
@@ -529,9 +700,28 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
  *
  */
 $z.render.renderDynamicComponent = function(component, options, write, complete) {
-  
   this.renderStaticComponent(component, options, write, function() {
     var moduleId = $z.getModuleId(component, true);
+    
+    var global = options.global;
+    var _options = options;
+    global._piped = global._piped || {};
+    
+    // Run piping
+    options = component.pipe ? component.pipe(options) || {} : {};
+    
+    //only pipe global if a global pipe has been specially specified
+    //piping the entire options global is lazy and ignored
+    if (options.global == _options.global)
+      delete options.global;
+    else {
+      //check if we've already piped a global, and if so, don't repipe
+      for (var p in options.global)
+        if (global._piped[p])
+          delete options.global[p];
+        else
+          global._piped[p] = true;
+    }
     
     //separate attahment module
     if (typeof component.attach == 'string') {
@@ -539,7 +729,7 @@ $z.render.renderDynamicComponent = function(component, options, write, complete)
       var attachId = $z.req.toUrl($z.attach.toAbsModuleId(component.attach, moduleId));
       
       write("\n<script>\n" +
-        "$z.attach('" + attachId + "', " + JSON.stringify(options) + ");\n" +
+        "$z.attach('zest/attach!" + attachId + "', " + JSON.stringify(options) + ");\n" +
         "</script>\n");
       
       complete();
@@ -547,42 +737,41 @@ $z.render.renderDynamicComponent = function(component, options, write, complete)
     
     //lazy attachment (mixed)
     else if (typeof component.attach == 'function') {
-      $z.attach.createAttachment(moduleId, function(attachDef) {
+      if (moduleId) {
+        
+        // hidden attachment - better (i think)
+        if (!$z.config.explicitAttachment) {
+          write("\n<script>\n" +
+            "$z.attach('zest/attach!" + moduleId + "', " + JSON.stringify(options) + ");\n" +
+          "</script>\n");
+          complete();
+        }
+        else {
+          // explicitly show attachment for debugging
+          $z.attach.createAttachment(moduleId, function(attachDef) {
+            write("\n<script>\n" +
+              "$z.attach(" + JSON.stringify(attachDef.requires) + ", " + "function(" + attachDef.dependencies.join(', ') + ") {\n" +
+                "return " + attachDef.definition + ";\n" +
+              "}" + ", " + JSON.stringify(options) + ");\n" + 
+            "</script>\n");
+            
+            complete();
+            
+          });
+        }
+      }
+      else {
         write("\n<script>\n" +
-          "$z.attach(" + JSON.stringify(attachDef.requires) + ", " + "function(" + attachDef.dependencies.join(', ') + ") {\n" +
-            "return " + attachDef.definition + ";\n" +
-          "}" + ", " + JSON.stringify(options) + ");\n" + 
-        "</script>\n");
+          "$z.attach(['zest'], function($z) {\n" +
+            "return " + $z.attach.serializeComponent(component) + ";\n" +
+          "}" + ", " + JSON.stringify(options) + ");\n" +
+          "</script>\n");
         
         complete();
-        
-      });
+      }
     }
     
     else
       complete();
   });
 }
-
-/*
- * $z.HTMLPage
- * A static structure to use for full page output.
- */
-//this gets created as an 'implementor' after creation
-$z.Page = {
-  template: function(o) {
-    return '<!doctype html> \n' +
-      '<html> \n' + 
-      '<head> \n' +
-      '  <script type="text/javascript" data-main="' + (o.main || '') + '" src="/' + ($z.config.mode == 'production' ? $z.config.production.baseUrl : $z.config.client.baseUrl) + '/require.js"></script> \n' +
-      '  <script type="text/javascript"> \n' +
-      '    require.config(' + JSON.stringify($z.config.mode == 'production' ? $z.config.production : $z.config.client) + '); \n' +
-      '    ' + $z.loadAttachScript() + ' \n' + 
-      '  </script> \n' +
-      '  <link rel="stylesheet" type="text/css" href="' + o.cssStream + '"></link>' +
-      '                 ' +
-      '</head> \n' +
-      '<body>{`body`}</body> \n' +
-      '</html>';
-  }
-};
