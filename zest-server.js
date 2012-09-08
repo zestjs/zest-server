@@ -40,7 +40,7 @@ var defaultConfig = {
     context: 'shared',
     nodeRequire: require,
     config: {
-      'is/main': {
+      'is/is': {
         client: false,
         render: true,
         node: true
