@@ -1,7 +1,7 @@
 {
   "name": "zest-server",
   "description": "Server-side component rendering",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "Guy Bedford <guybedford@gmail.com>",
   "repository": {
     "type": "git",
