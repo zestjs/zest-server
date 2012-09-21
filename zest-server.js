@@ -23,7 +23,10 @@ var defaultConfig = {
   appDir: 'www',
   dynamicLibPrefix: 'dlib',
   serveFiles: true,
-  explicitAttachment: true,
+  explicitAttachment: false,
+  devAttachment: false,
+  devStaticCache: 0,
+  staticLatency: 0,
   
   require: {
     baseUrl: 'lib',
@@ -99,6 +102,7 @@ $z.serveApp = function(appId) {
           method: method,
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Content-Length': str_data.length,
             'Cookie': req.headers.cookie
           }
@@ -200,23 +204,23 @@ $z.setConfig = function(config, requires, complete) {
   
   $z.require = requirejs.config(config.server);
   
-  $z.require(['zest', 'css', 'css/css.api', 'zest/attach'], function(z, css, cssApi, attach) {
+  $z.require(['zest', 'css', 'zest/attach'], function(z, css, attach) {
   
-    $z.cssApi = cssApi;
     $z.css = css;
     $z.attach = attach;
     
-    z.underwrite($z, z, {
-      'constructor': z.extend.REPLACE,
-      'render': z.underwrite,
-      'Region': z.extend.IGNORE
+    z.extend($z, z, {
+      '*': 'FILL',
+      'constructor': 'REPLACE',
+      'render': 'PREPEND',
+      'Region': 'IGNORE'
     });
     
-    ResourceStream = $z.create([$z.constructor, $z.InstanceChains], ResourceStream);
+    ResourceStream = $z.create([$z.Constructor], ResourceStream);
     
-    $z.overwrite(z, $z);
+    $z.extend(z, $z, 'REPLACE');
     
-    $z.Component._definition.construct = function(options) {
+    $z.Component.construct = function(options) {
       throw 'Components are not designed to be constructed on the server! Use $z.render instead.';
     }
     
@@ -233,12 +237,12 @@ $z.setConfig = function(config, requires, complete) {
     
     //store full config
     $z.config = $z.config || {};
-    $z.overwrite($z.config, config);
+    $z.extend($z.config, config, 'REPLACE');
     
     //prepare file server
     if ($z.config.serveFiles)
       fileServer = new nodeStatic.Server($z.config.appDir, {
-        cache: $z.config.mode == 'production' ? 3600 : 0
+        cache: $z.config.mode == 'production' ? 3600 : $z.config.devStaticCache
       });
 
     $z.require(requires, complete);
@@ -248,7 +252,7 @@ $z.setConfig = function(config, requires, complete) {
   
 $z.build = function(complete) {
   requirejs.optimize($z.config.build, function(buildResponse) {
-    $z.log(buildResponse);
+    //$z.log(buildResponse);
     complete();
   });
   //NB include css build here
@@ -369,6 +373,7 @@ $z.render = function(structure, htmlTemplate, options, res) {
  * 
  */
 $z.serveResources = function(req, res, next) {
+  
   if (!$z.config)
     throw 'You must first use $z.loadConfig to set configuration before serving resources.';
   
@@ -386,7 +391,7 @@ $z.serveResources = function(req, res, next) {
     //if the resource is in the generation queue, then provide it on generation completion
     if (resourceStreams[rName]) {
       res.writeHead(200, headers);
-      resourceStreams[rName].attach(res);      
+      resourceStreams[rName].attach(res);
     }
     
     //if the resource is in the dynamic cache, then provide it
@@ -406,9 +411,12 @@ $z.serveResources = function(req, res, next) {
 
 $z.serveFiles = function(req, res, next) {
   if ($z.config.serveFiles) {
-    fileServer.serve(req, res).addListener('error', function (err) {
-      $z.log("Error serving " + req.url + " - " + err.message);
-    });
+    setTimeout(function() {
+      fileServer.serve(req, res).addListener('error', function (err) {
+        $z.log("Error serving " + req.url + " - " + err.message);
+        next();
+      });
+    }, $z.config.staticLatency);
   }
   else
     next();
@@ -429,12 +437,13 @@ $z.serveAPI = function(services) {
   }
   return function(req, res, next) {
     var detectUrl = req.url;
-    var contentType = req.headers['content-type'];
+    var contentType = req.headers['content-type'] || '';
+    var accept = req.headers['accept'] || '';
     
     if (req.url.substr(0, 5) == '/json')
       detectUrl = req.url.substr(5);
     
-    else if ((!contentType || contentType.substr(0, 16) != 'application/json') && req.method != 'GET') {
+    else if (contentType.indexOf('application/json') == -1 && accept.indexOf('application/json') == -1) {
       next();
       return;
     }
@@ -481,15 +490,8 @@ $z.render.createResourceStreams = function(structureId, options, includedModules
     if (resourceStreams[cssUrl])
       cssStream = resourceStreams[cssUrl];
     
-    else {
+    else
       cssStream = new ResourceStream(cssUrl);
-      
-      $z.on($z.css, 'add', cssStream.write);
-      cssStream.end.on(function() {
-        $z.remove($z.css, 'add', cssStream.write);
-      });
-      
-    }
   }
   else
     cssStream = { url: cssUrl };
@@ -553,7 +555,7 @@ var resourceCache = {};
  * 
  */
 var ResourceStream = {
-  //implement: [$z.constructor, $z.InstanceChains],
+  //implement: [$z.Constructor],
   construct: function(url) {
     this.buffer = '';
     this.url = url;
@@ -583,8 +585,9 @@ var ResourceStream = {
     },
     __end: function(chunk) {
       
-      this.buffer = this.buffer.replace($z.cssApi.buffer, '');
-      this.buffer += $z.cssApi.buffer;
+      var buffer = $z.css.buffer;
+      for (var c in buffer)
+        this.buffer += buffer[c];
       
       if (typeof chunk == 'string') {
         this.endStreams(chunk);
@@ -734,11 +737,10 @@ $z.render.renderDynamicComponent = function(component, options, write, complete)
     //lazy attachment (mixed)
     else if (typeof component.attach == 'function') {
       if (moduleId) {
-        
         // hidden attachment - better (i think)
-        if (!$z.config.explicitAttachment) {
+        if (!$z.config.explicitAttachment || !$z.config.devAttachment) {
           write("\n<script>\n" +
-            "$z.attach('zest/attach!" + moduleId + "', " + JSON.stringify(options) + ");\n" +
+            "$z.attach('" + ($z.config.devAttachment ? "zest/attach!" : "") + moduleId + "', " + JSON.stringify(options) + ");\n" +
           "</script>\n");
           complete();
         }
