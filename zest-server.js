@@ -1,610 +1,678 @@
 /*
- * Zest JS
- * Guy Bedford 2012
- * Verve Interactive
- * zestjs.org
- * openclient.org
+ * Zest Server
+ *
+ * Can be required as a node module with the following methods:
+ * render(moduleId, options);
+ * render(pageId, moduleId, options);
+ * config(config, callback);
+ * serve(res, res, [next]);
+ * 
  */
   
-var path = require('path'),
-  fs = require('fs'),
-  crypto = require('crypto'),
+var fs = require('fs'),
   nodeStatic = require('node-static'),
   requirejs = require('requirejs'),
+  path = require('path'),
   http = require('http');
   
-var $z = exports;
-  
-  
-var fileServer = null;
+var zest = exports;
 
 var defaultConfig = {
-  mode: 'dev',
-  appDir: 'www',
-  dynamicLibPrefix: 'dlib',
+  environment: 'dev',
+  
+  //environment-specific configs, extend base config
+  environments: {
+    production: {
+      
+    },
+    dev: {
+      fileExpires: 0,
+      
+      debugInfo: true,
+      logRender: true,
+      renderDelay: 100,
+      staticLatency: 100,
+      
+      /* Application Server */
+      modules: {
+        //'cs!$zest-server/core-module': {}
+      }
+    }
+  },
+  
+  zestLayer: 'zest/build-layer',
+  
+  buildLayers: {
+    'zest/build-layer': {
+      name: '$zest-server/attachment',
+      include: ['zest/zest', 'selector']
+    }
+  },
+  
+  /* Layer Building */
+  rebuildZestLayer: true,
+  
+  /* Attachment */
+  explicitAttachment: false, //show attachment object in html
+  dynamicAttachment: false, //when outside a build, generate the attach! variant client-side
+  
+  /* File Server */
   serveFiles: true,
-  explicitAttachment: false,
-  devAttachment: false,
-  devStaticCache: 0,
+  fileExpires: 500,
+  
+  /* https and spdy support */
+  https: {
+    enable: false,
+    key: ''
+  },
+  spdy: false,
+  
+  /* Page Load Testing */
+  renderDelay: 0,
   staticLatency: 0,
+  debugInfo: false,
+  
+  /* Page Rendering - default options */
+  page: {
+    //structure to render the html page with (html template effectively)
+    pageStructure: 'cs!$zest-server/html',
+    
+    //page options, structure and options are body structure, as set by route
+    id: null,
+    title: '',
+    layers: [], //by default starts with zestLayer
+    main: '',
+    //requireConfig: zest.config.client,
+    options: {},
+    global: {} //default global options
+  },
+  
+  /* Application Server */
+  modules: {
+    //'cs!$zest-server/core-module': {}
+  },
+  
+  /* Require Config */
+  appDir: process.cwd(),
+  publicDir: 'www',
+  libDir: 'lib',
+  libBuildDir: 'blib',
   
   require: {
-    baseUrl: 'lib',
     config: {
-      'is/is': {
+      'require-is/is': {
         client: true,
         render: true,
         node: false
       }
-    }
-  },
-  
-  server: {
-    context: 'shared',
-    nodeRequire: require,
-    config: {
-      'is/is': {
-        client: false,
-        render: true,
-        node: true
-      }
     },
     paths: {
-      '@': '../..'
+    },
+    map: {
+      '*': {
+        is: 'require-is/is',
+        css: 'require-css/css',
+        less: 'require-less/less'
+      }
+    },
+  
+    //server require config
+    server: {
+      // base url is publicDir/libDir
+      context: 'shared',
+      nodeRequire: require,
+      paths: {
+        '$zest-server': __dirname,
+        '$': process.cwd()
+      },
+      map: {
+        '*': {
+          selector: 'empty',
+          jquery: 'empty'
+        }
+      },
+      config: {
+        'require-is/is': {
+          client: false,
+          render: true,
+          node: true
+        }
+      }
+    },
+  
+    //client require config
+    client: {
+      // base url is libDir
+    },
+  
+    //build require config
+    //when we do a build, zest core is dropped into the zest/core file
+    build: {
+      // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
+      modules: [
+        {
+          name: 'test',
+          include: 'test',
+          exclude: ['zest/core']
+        }
+      ]
     }
-  },
-  client: {},
-  production: {},
-  build: {}
+  }
 };
 
-$z.serveApp = function(appId) {
-  var app;
-  if (typeof appId == 'string')
-    $z.require([appId], function(_app) {
-      app = _app;
-    });
-  else
-    app = appId;
-  
-  return function(req, res, next) {
-    if (!app) {
-      $z.serveResources(req, res, next);
-      return;
-    }
-  
-    //create render options
-    
-    var pageOptions = {
-      method: req.method,
-      url: req.url,
-      appId: appId
-    };
-    
-    var routeData = app.getRoute(pageOptions);
-    
-    req.options = req.options || {};
-    routeData.global = req.options;
-    
-    //create the http service for this cookie (session) and port
-    req.options.httpService = {
-      req: function(method, url, data, callback) {
-        if (typeof data == 'function') {
-          callback = data;
-          data = {};
-        }
-        var _data = [];
-        var str_data = JSON.stringify(data);
-        var _req = http.request({
-          hostname: 'localhost',
-          path: url,
-          port: parseInt(req.headers.host.split(':').pop()) || 80,
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Content-Length': str_data.length,
-            'Cookie': req.headers.cookie
-          }
-        }, function(_res) {
-          _res.setEncoding('utf8');
-          _res.on('data', function (chunk) {
-            _data.push(chunk);
-          });
-          _res.on('end', function() {
-            try {
-              _data = JSON.parse(_data.join(''));
-            }
-            catch (e) {
-              callback('Unable to parse JSON response.', true);
-              return;
-            }
-            callback(_data);
-          });
-        });
-        _req.on('error', function(e) {
-          callback('Connection error', true);
-        });
-        _req.end(str_data);
-      },
-      get: function(url, data, callback) {
-        this.req('GET', url, data, callback);
-      },
-      post: function(url, data, callback) {
-        this.req('POST', url, data, callback);
-      },
-      put: function(url, data, callback) {
-        this.req('PUT', url, data, callback);
-      },
-      delete: function(url, data, callback) {
-        this.req('DELETE', url, data, callback);
-      }
-    };
-    
-    if (routeData)
-      $z.render(routeData.route, app.htmlTemplate, routeData, res);
-    
-    else
-      $z.serveResources(req, res, next);
-  }
+
+var reqErr = function(err) {
+  console.dir(JSON.stringify(zest.config));
+  console.log('Error setting config when loading modules: ' + JSON.stringify(err.requireModules));
+  throw err;
 }
 
+//get hooked in once config has been loaded
+var $z, css, attach, normalize;
 
-$z.setConfig = function(config, requires, complete) {
-    
-  if (arguments.length == 2) {
-    complete = requires;
-    requires = [];
-  }
-    
-  //load configuration
-  if (typeof config == 'string')
-    return $z.loadConfig(eval(fs.readFileSync(config, 'utf-8')), complete);
+//trace css dependencies for modules to allow critical css inclusions
+var cssDependencies = {};
+
+zest.init = function(config, complete) {
   
-  //load requirejs configurations from files if necessary
-  var loadConfig = function(prop) {
-    if (typeof config[prop] == 'string')
-      config[prop] = eval('var c,require=function(o){return typeof o=="object"?c=o:c;}var requirejs=require.config=require;' +
-        fs.readFileSync(config[prop], 'utf-8'));
-  }
+  console.log('Loading Configuration');
+  if (zest.config != config)
+    zest.config = loadConfig(config);
   
-  loadConfig('require');
+  console.log('Initializing RequireJS');
+  zest.require = requirejs.config(zest.config.require.server);
   
-  loadConfig('client');
-  loadConfig('build');
-  loadConfig('server');
-  loadConfig('production');
-  
-  
-  function deepUnderwrite(a, b) {
-    for (var p in b) {
-      if (typeof b[p] == 'object') {
-        a[p] = a[p] || {};
-        deepUnderwrite(a[p], b[p]);
+  //set up css dependency tracking
+  requirejs.onResourceLoad = function(context, map, depArray) {
+    //coffee script -> dependency is name dependency
+    var moduleId = map.prefix == 'cs' ? map.name : map.id;
+    //check each dependency for css! calls or dependencies which have css! dependencies themselves
+    for (var i = 0; i < depArray.length; i++) {
+      var depId = depArray[i].prefix == 'cs' ? depArray[i].name : depArray[i].id;
+      
+      //dependency that might have sub-css dependencies
+      if (cssDependencies[depId]) {
+        cssDependencies[moduleId] = cssDependencies[moduleId] || [];
+        if (cssDependencies[moduleId].indexOf(cssDependencies[depId]) == -1)
+          cssDependencies[moduleId] = (cssDependencies[moduleId] || []).concat(cssDependencies[depId]);
       }
-      else if (a[p] === undefined)
+      //css dependency
+      if (depArray[i].prefix == 'require-css/css') {
+        cssDependencies[moduleId] = cssDependencies[moduleId] || [];
+        if (cssDependencies[moduleId].indexOf('css!' + depArray[i].name) == -1)
+          cssDependencies[moduleId].push('css!' + depArray[i].name);
+      }
+      else if (depArray[i].prefix == 'require-less/less') {
+        cssDependencies[moduleId] = cssDependencies[moduleId] || [];
+        if (cssDependencies[moduleId].indexOf('less!' + depArray[i].name) == -1)
+          cssDependencies[moduleId].push('less!' + depArray[i].name);
+      }
+    }
+  }
+  
+  //requirejs
+  console.log('Loading RequireJS dependencies');
+  zest.require(['require', 'zest', 'css', '$zest-server/attach', 'require-css/normalize'], function(req, _$z, _css, _attach, _normalize) {
+    zest.req = req;
+    zest.baseUrl = req.toUrl('.');
+    $z = _$z;
+    css = _css;
+    attach = _attach;
+    normalize = _normalize;
+    
+    $z.extend($z.render, zest.render, 'REPLACE');
+    
+    //the step function for creating the server. executed immediately after creating.
+    var makeServer = $z.fn($z.fn.ASYNC);
+  
+    //create server handler
+    makeServer.on(function(next) {
+      zest.server = $z.fn($z.fn.ASYNC);
+      zest.handlers = $z.fn($z.fn.ASYNC);
+      zest.routes = {};
+      
+      next();
+    });
+    
+    //load module config
+    var moduleConfig = [];
+    var modules = [];
+    makeServer.on(function(next) {
+      console.log('Loading Modules');
+      var moduleConfigRequires = [];
+      
+      for (var module in zest.config.modules) {
+        modules.push(module);
+        if (typeof zest.config.modules[module] == 'string') {
+          moduleConfigRequires.push(module);
+          moduleConfig.push(undefined);
+        }
+        else {
+          moduleConfigRequires.push('');
+          moduleConfig.push(zest.config.modules[module]);
+        }
+      }
+      zest.require(moduleConfigRequires, function() {
+        for (var i = 0; i < arguments.length; i++)
+          moduleConfig[i] = moduleConfig[i] || arguments[i];
+          
+        next();
+      });
+    });
+    
+    //load modules
+    makeServer.on(function(next) {
+      //default module is zest core module
+      if (modules.length == 0)
+        modules.push('cs!$zest-server/core-module');
+      //store the modules for direct access
+      zest.modules = {};
+      zest.require(modules, function() {
+        for (var i = 0; i < arguments.length; i++) {
+          var module = arguments[i];
+          //instantiate with config
+          if (typeof module == 'function')
+            module = module(moduleConfig[i]);
+          if (module.routes)
+            $z.router.addRoutes(module.routes);
+          if (module.handler)
+            zest.handlers.on(function() {
+              module.handler.apply(module, arguments);
+            });
+          zest.modules[modules[i]] = module;
+        }
+        next();
+      });
+    });
+    
+    //include module-defined zest configs
+    makeServer.on(function(next) {
+      for (var module in zest.modules) {
+        if (!zest.modules[module].zestConfig)
+          continue;
+        
+        var moduleConfig = zest.modules[module].zestConfig;
+        
+        //compute environment config as outModuleConfig
+        var outModuleConfig = moduleConfig;
+        if (moduleConfig.environments) {
+          outModuleConfig = moduleConfig.environments[zest.config.environment] || {};
+          delete moduleConfig.environments;
+          $z.extend(outModuleConfig, moduleConfig, 'DPREPEND');
+        }
+        
+        //save environment config back for reference
+        zest.modules[module].zestConfig = outModuleConfig;
+        
+        //add module config to main zest config
+        $z.extend(zest.config, outModuleConfig, {'*': 'DAPPEND', 'require': 'IGNORE'});
+        
+        //compute require config with defaults, then add into main zest config
+        if (outModuleConfig.require) {
+          var _extendRules = {'*': 'DPREPEND', 'client': 'IGNORE', 'server': 'IGNORE', 'build': 'IGNORE'};
+          
+          $z.extend(zest.config.require.client, outModuleConfig.require, _extendRules);
+          $z.extend(zest.config.require.server, outModuleConfig.require, _extendRules);
+          $z.extend(zest.config.require.build, outModuleConfig.require, _extendRules);
+          
+          $z.extend(zest.config.require.client, outModuleConfig.require.client || {}, 'DPREPEND');
+          $z.extend(zest.config.require.server, outModuleConfig.require.server || {}, 'DPREPEND');
+          $z.extend(zest.config.require.build, outModuleConfig.require.build || {}, 'DPREPEND');
+          
+          //update server require
+          zest.require = requirejs.config(zest.config.require.server);
+        }
+      }
+      next();
+    });
+    
+    //build the core if necessary
+    makeServer.on(function(next) {
+      if (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir, zest.config.zestLayer + '.js')))
+        return next();
+      
+      console.log('Building core files');
+      var build = {
+        baseUrl: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir),
+        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir, zest.config.zestLayer + '.js'),
+        paths: {
+          '$zest-server': __dirname
+        },
+        //optimize: 'none', //quicker
+        //ensure synchronous requires
+        wrap: {
+          start: 'for (var c in require.s.contexts) { require.s.contexts[c].nextTick = function(fn){ fn(); } }',
+          end: "require(['$zest-server/attachment']);"
+        }
+      };
+      $z.extend(build, zest.config.buildLayers[zest.config.zestLayer], 'FILL');
+      $z.extend(build, zest.config.require.build, {
+        '*': 'FILL',
+        'appDir': 'IGNORE',
+        'dir': 'IGNORE',
+        'baseUrl': 'IGNORE',
+        'modules': 'IGNORE',
+        'paths': 'FILL'
+      });
+      
+      var _onResourceLoad = requirejs.onResourceLoad;
+      requirejs.optimize(build, function(buildResponse) {
+        console.log(buildResponse);
+        requirejs.onResourceLoad = _onResourceLoad;
+        
+        //clean up after build, by restarting entire init
+        zest.config.rebuildZestLayer = false;
+        delete requirejs.s.contexts[zest.config.require.server.context || '_'];
+        zest.init(zest.config, complete);
+      });
+    });
+    
+    //create server
+    makeServer.on(function(next) {
+      console.log('Creating server');
+      
+      //initial handler
+      zest.server.on(function(req, res, next) {
+        
+        //check the 'accept' header if given, to ensure we are rendering html
+        //if not, skip routing check
+        if (req.headers.accept)
+          if (!req.headers.accept.match(/text\/html/))
+            return next();
+        
+        /*
+         * check the url for any routes -> populates route data onto req:
+         *
+         * route.redirect (if doing a redirect)
+         * route.route (the route object)
+         * route.options (the route component options)
+         * 
+         */
+        var r = $z.router.route(req.url);
+        //null route -> skip
+        if (r.route === null)
+          return next();
+        
+        //redirect
+        if (r.redirect) {
+          req.redirect = r.redirect;
+          return next();
+        }
+        
+        //create a fresh page object
+        req.page = {};
+        
+        //route object
+        if (typeof r.route == 'object') {
+          //clone the route defaults onto the page
+          $z.extend(req.page, r.route, {
+            '*': 'DFILL',
+            'layers': 'ARR_PREPEND'
+          });
+        }
+        else {
+          req.page.structure = r.route;
+          req.page.options = $z.extend({}, r.options, 'FILL');
+        }
+        
+        //then fill in the page defaults from the config
+        $z.extend(req.page, zest.config.page, {
+          '*': 'DFILL',
+          'layers': 'ARR_PREPEND'
+        });
+
+        //deep clone the require config, allowing page-specific variation
+        req.page.requireConfig = $z.extend(req.page.requireConfig || {}, zest.config.require.client, 'DREPLACE');
+        
+        //lookup the module name responsible for the page route
+        for (var module in zest.modules)
+          if (zest.modules[module].routes[req.page.options._route]) {
+            req.page.module = zest.modules[module];
+            break;
+          }
+        
+        next();
+      });
+      
+      //run the handlers - can alter the routing
+      zest.server.on(zest.handlers);
+      
+      //finally, follow the routing
+      zest.server.on(function(req, res, next) {
+        if (req.redirect) {
+          res.writeHead(301, {
+            'Location': req.redirect
+          });
+          res.end();
+          return;
+        }
+        
+        if (!req.page || !req.page.structure)
+          return next();
+        
+        //single-argument shorthand for a page render
+        zest.renderPage(req.page, res);
+      });
+      
+      //fall through is the file server (if enabled)
+      zest.server.on(serveFiles);
+      
+      //final fall through is the zest 404, this should never be reached really
+      zest.server.on(function(req, res) {
+        res.writeHead(404, {
+          'Content-Type': 'text/html'
+        });
+        res.end('Not a valid Url');
+      });
+      
+      next();
+    });
+    
+    makeServer(complete);
+  }, reqErr);
+}
+
+zest.startServer = function(port) {
+  if (!setConfig)
+    throw 'Configuration hasn\'t been set to start server';
+  http.createServer(zest.server).listen(port || zest.config.port || 8080);
+  console.log('Listing on port 8080...');
+}
+
+/* zest.clearRequires = function() {
+  delete requirejs.s.contexts[zest.config.server.context];
+  cssDependencies = {};
+  
+  zest.require = requirejs.config(zest.config.server);
+} */
+
+var setConfig = false;
+//load requirejs configurations from files if necessary
+var getJSONConfigFile = function(file) {
+  return eval('var c,require=function(o){return typeof o=="object"?c=o:c;},requirejs=require.config=require;(' +
+    fs.readFileSync(file, 'utf-8') + ');');
+}
+//config is simply taken for the dirname where zest.json can be found
+var loadConfig = function(config) {
+  //load configuration
+  if (typeof config == 'string') {
+    //config file path is taken to be app directory
+    defaultConfig.appDir = path.resolve(config);
+    defaultConfig.require.server.paths['$'] = defaultConfig.appDir;
+    //load config as a json file
+    return loadConfig(getJSONConfigFile(path.resolve(config, 'zest.json')));
+  }
+  
+  if (setConfig)
+    throw 'Configuration has already been set. Start a new server instance for alternative configuration.';
+  setConfig = true;
+    
+  function deepPrepend(a, b) {
+    for (var p in b) {
+      if (b[p] instanceof Array) {
+        a[p] = a[p] || [];
+        a[p] = a[p].concat(b[p]);
+      }
+      if (typeof b[p] == 'object' && b[p] !== null) {
+        a[p] = a[p] || {};
+        deepPrepend(a[p], b[p]);
+      }
+      else if (a[p] == undefined)
         a[p] = b[p];
     }
   }
   
-  //provide default configuration
-  deepUnderwrite(config, defaultConfig);
+  deepPrepend(config, defaultConfig);
   
-  //derive client, build, server and production configs
-  deepUnderwrite(config.client, config.require);
-  deepUnderwrite(config.server, config.require);
-  deepUnderwrite(config.build, config.require);
-  deepUnderwrite(config.production, config.require);
+  //provide default configurations, starting with the environment mode config
+  var outConfig = config.environments[config.environment];
+  delete config.environments;
   
-  //hack
-  config.client.baseUrl = '/' + config.client.baseUrl;
+  deepPrepend(outConfig, config);
   
-  //set server baseUrl if not already
-  config.server.baseUrl = config.appDir + '/' + config.server.baseUrl;
+  //derive client, build, server and production require configs
+  var requireConfig = {
+    server: outConfig.require.server,
+    client: outConfig.require.client,
+    build: outConfig.require.build
+  };
+  delete outConfig.require.server;
+  delete outConfig.require.client;
+  delete outConfig.require.build;
   
-  $z.require = requirejs.config(config.server);
+  deepPrepend(requireConfig.server, outConfig.require);
+  deepPrepend(requireConfig.client, outConfig.require);
+  deepPrepend(requireConfig.build, outConfig.require);
   
-  $z.require(['zest', 'css', 'zest/attach'], function(z, css, attach) {
+  outConfig.require = requireConfig;
   
-    $z.css = css;
-    $z.attach = attach;
-    
-    z.extend($z, z, {
-      '*': 'FILL',
-      'constructor': 'REPLACE',
-      'render': 'PREPEND',
-      'Region': 'IGNORE'
-    });
-    
-    ResourceStream = $z.create([$z.Constructor], ResourceStream);
-    
-    $z.extend(z, $z, 'REPLACE');
-    
-    $z.Component.construct = function(options) {
-      throw 'Components are not designed to be constructed on the server! Use $z.render instead.';
-    }
-    
-    //make the static render function asynchronous
-    /* $z.render.renderStaticComponent = (function makeAsync(f) {
-      return function() {
-        var self = this;
-        var args = arguments;
-        process.nextTick(function() {
-          return f.apply(self, args);
-        })
-      }
-    })($z.render.renderStaticComponent); */
-    
-    //store full config
-    $z.config = $z.config || {};
-    $z.extend($z.config, config, 'REPLACE');
-    
-    //prepare file server
-    if ($z.config.serveFiles)
-      fileServer = new nodeStatic.Server($z.config.appDir, {
-        cache: $z.config.mode == 'production' ? 3600 : $z.config.devStaticCache
-      });
-
-    $z.require(requires, complete);
-    
-  });
-};
+  //set directories - cant override
+  outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libDir);
+  outConfig.require.client.baseUrl = '/' + (outConfig.mode == 'production' ? outConfig.libBuildDir : outConfig.libDir);
+  outConfig.require.build.baseUrl = '.';
+  outConfig.require.build.appDir = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libDir);
+  outConfig.require.build.dir = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libBuildDir);
   
-$z.build = function(complete) {
-  requirejs.optimize($z.config.build, function(buildResponse) {
-    //$z.log(buildResponse);
-    complete();
-  });
-  //NB include css build here
+  return outConfig;
 }
 
+var fileServer = null;
+var serveFiles = function(req, res, next) {
+  if (zest.config.serveFiles) {
+    fileServer = fileServer || new nodeStatic.Server(path.resolve(zest.config.appDir, zest.config.publicDir), {
+      cache: zest.config.fileExpires
+    });
+    setTimeout(function() {
+      fileServer.serve(req, res).addListener('error', function (err) {
+        next();
+      });
+    }, zest.config.staticLatency);
+  }
+  else
+    next();
+}
+
+
+zest.build = function(complete) {
+  console.log('Running build');
+  zest.config.require.build.modules = zest.config.require.build.modules || [];
+  
+  var outDir = zest.config.appDir.split('/');
+  outDir.pop();
+  outDir.push('www-built');
+  outDir = outDir.join('/');
+  
+  zest.config.require.build.appDir = zest.config.appDir;
+  zest.config.require.build.dir = outDir;
+  
+  requirejs.optimize(zest.config.require.build, function(buildResponse) {
+    console.log(buildResponse);
+    complete();
+  });
+}
+
+
 /*
- * $z.render server differences
+ * $z.render
  *
- * $z.render(Component, PageTemplate, options, response)
+ * $z.render(structure, [pageOptions], options, write, complete)
  *
- * If no PageTemplate provided, $z.HTML used by default
+ * streams the response.
  *
- * options.appData is the 'global'
+ * If no page options are provided, the default page template is used.
  *
+ * Render includes attachment script prefix and suffixes.
  *
- * String is returned instead of an array of DOM elements.
+ * This assumes that the template populates the 'head' region to allow for these scripts to be embedded.
  *
- * $z.render.renderHTML(html, children);
+ * htmlOptions = {
+ *   component: 'pageTemplateId',
+ *   title: '',
+ *   body: ''
+ * }
  *
- * children = {'<replacement>', 'value'}
- * 
- * Component Rendering is identical, except that we additionally calculate the component attachment script
- *
- * The component is searched for in the defined modules to match it to a requirejs moduleId.
- * If one is found, the moduleId is used for the component attachment.
- *
- * If no moduleId is found, the component is assumed anonymous, and serialized.
- *
- *
- * Shared functions:
- * $z.render.renderItem
- * $z.render.renderStaticComponent
- *
- * Entirely asynchronous render function!
+ * Can add any others for a custom template
  *
  * NB need to add a tabDepth
  *
- * ---
- *
- * Render creates the dynamic resource streams based on the following:
- *
- * given
- *   options.includeModules, Array, optional
- * generate
- *   options.cssStream, url
- *   options.jsStream, url
- *
- * This covers ALL the absolutely necessary meta for a managed dynamic script and CSS render.
  *
  */
-$z.render = function(structure, htmlTemplate, options, res) {
-  if (arguments.length != 4) {
-    res = options;
-    options = htmlTemplate;
-    htmlTemplate = 'cs!zest/html';
-  }
-  htmlTemplate = htmlTemplate || 'cs!zest/html';
+zest.render = function(structure, options, res, complete) {
+  options = options || {};
+  options.global._nextComponentId = 1;
+  delete $z._nextComponentId;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/html'
+  });
   
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/html');
-  
-  if (typeof htmlTemplate == 'string') {
-    $z.require([htmlTemplate], function(htmlTemplate) {
-      $z.render(structure, htmlTemplate, options, res);
-    });
-    return;
-  }
-  
-  var streams;
-  if (typeof structure == 'string')
-    streams = $z.render.createResourceStreams(structure, options, options.includeModules || []);
-  else
-    streams = $z.render.createResourceStreams('inline', structure, options.includeModules || []);
-  
-  var write = function(chunk) {
+  $z.render.renderItem({
+    structure: structure,
+    options: options
+  }, function(chunk) {
     res.write(chunk);
-  }
-  
-  var complete = function() {
+  }, function() {
     res.end();
-    if (streams.css.end)
-      streams.css.end();
-    if (streams.js.end)
-      streams.js.end();
-  }
-  
-  var render = function(structure) {
-    options.component = structure;
-    var htmlOptions = {
-      // NB generalise 'cssStream' into something that can be used as an app.css global!
-      cssStream: streams.css.url,
-      jsStream: streams.js.url,
-      
-      body: options,
-      title: structure.title,
-      deferTitle: structure.deferTitle,
-      
-      requireConfig: $z.config.mode == 'production' ? $z.config.production : $z.config.client,
-      
-      appId: options.appId,
-      global: options.global
-    };
-    $z.render.renderItem(htmlTemplate, htmlOptions, write, complete);
-  }
-  
-  if (typeof structure == 'string')
-    $z.require([structure], render);
-  else
-    render(structure);
+    if (complete)
+      complete();
+  });
 }
 
-/*
- * $z.serveResources
- * Serves the main javascript library folder, as well as the dynamic resource generation folder
- * Also handles the caching of dynamic resources
- *
- * Can be used as middleware or a callback
- * 
- */
-$z.serveResources = function(req, res, next) {
-  
-  if (!$z.config)
-    throw 'You must first use $z.loadConfig to set configuration before serving resources.';
-  
-  //serve dynamically generated resources
-  if (req.url.substr(0, 1 + $z.config.dynamicLibPrefix.length) == '/' + $z.config.dynamicLibPrefix) {
+zest.renderPage = function(page, res, complete) {
 
-    var rName = req.url;
+  //add the defaults to the page
+  $z.extend(page, zest.config.page, {
+    '*': 'DFILL',
+    'layers': 'ARR_PREPEND'
+  })
+
+  //wont be altering at this level, so no need to clone require config
+  if (!page.requireConfig)
+    page.requireConfig = zest.config.require.client;
   
-    var headers = {};
-    if (rName.substr(rName.length - 2) == 'js')
-      headers['Content-Type'] = 'text/javascript';
-    else if (rName.substr(rName.length - 3) == 'css')
-      headers['Content-Type'] = 'text/css';
+  //add zest layer
+  page.layers.unshift(zest.config.zestLayer + '.js');
+  
+  delete zest._nextComponentId;
+  page.global._nextComponentId = 1;
     
-    //if the resource is in the generation queue, then provide it on generation completion
-    if (resourceStreams[rName]) {
-      res.writeHead(200, headers);
-      resourceStreams[rName].attach(res);
-    }
-    
-    //if the resource is in the dynamic cache, then provide it
-    else if (resourceCache[rName]) {
-      res.writeHead(200, headers);
-      res.end(resourceCache[rName]);
-    }
-    
-    else {
-      res.writeHead(404, headers);
-      res.end('Dynamic resource not available.');
-    }
-  }
-  else
-    $z.serveFiles(req, res, next);
+  res.writeHead(200, {
+    'Content-Type': 'text/html'
+  });
+  
+  $z.render.renderItem({
+    structure: page.pageStructure,
+    options: page
+  }, function(chunk) {
+    res.write(chunk);
+  }, function() {
+    res.end();
+    if (complete)
+      complete();
+  });
 }
 
-$z.serveFiles = function(req, res, next) {
-  if ($z.config.serveFiles) {
-    setTimeout(function() {
-      fileServer.serve(req, res).addListener('error', function (err) {
-        $z.log("Error serving " + req.url + " - " + err.message);
-        next();
-      });
-    }, $z.config.staticLatency);
-  }
-  else
-    next();
-}
-
-$z.serveAPI = function(services) {
-  if (typeof services == 'string') {
-    var server;
-    $z.require([services], function(services) {
-      server = $z.serveAPI(services);
-    });
-    return function(req, res, next) {
-      if (server)
-        return server(req, res, next);
-      else
-        next();
-    };
-  }
-  return function(req, res, next) {
-    var detectUrl = req.url;
-    var contentType = req.headers['content-type'] || '';
-    var accept = req.headers['accept'] || '';
-    
-    if (req.url.substr(0, 5) == '/json')
-      detectUrl = req.url.substr(5);
-    
-    else if (contentType.indexOf('application/json') == -1 && accept.indexOf('application/json') == -1) {
-      next();
-      return;
-    }
-    
-    //NB corresponding post version of '/json' shortcut
-    var method_services = services[req.method];
-    for (var s in method_services)
-      if (s == detectUrl) {
-        res.setHeader('Content-Type', 'application/json');
-        res.statusCode = 200;
-        method_services[s](req, res);
-        return;
-      }
-    next();
-  }
-}
-
-/*
- * $z.createResourceStreams
- *
- * Returns urls for the css and js resource streams of the renderable located
- * at structureId.
- *
- * The urls work immediately. CSS is streamed as it is written on the server,
- * while JS is held back until optimization completion (for build)
- * 
- * These paths are served dynamically with the $z.serveResources middleware
- * 
- */
-$z.render.createResourceStreams = function(structureId, options, includedModules) {
-  
-  //the resource name is taken as the structureId followed by the md5 hash of the options
-  //this allows for resource caching both client and server side
-  var hash = crypto.createHash('md5');
-  hash.update(JSON.stringify(options), 'utf-8');
-  hash = hash.digest('hex');
-  
-  var cssUrl = '/' + $z.config.dynamicLibPrefix + '/' + structureId + '/' + hash + '.css';
-  var jsUrl = '/' + $z.config.dynamicLibPrefix + '/' + structureId + '/' + hash + '.js';
-  
-  var cssStream, jsStream;
-  
-  if (resourceCache[cssUrl] === undefined) {
-    if (resourceStreams[cssUrl])
-      cssStream = resourceStreams[cssUrl];
-    
-    else
-      cssStream = new ResourceStream(cssUrl);
-  }
-  else
-    cssStream = { url: cssUrl };
-  
-  if (resourceCache[jsUrl] === undefined)
-    jsStream = new ResourceStream(jsUrl);
-  else
-    jsStream = { url: jsUrl };
-  
-  //do generation
-  if ($z.config.mode == 'production') {
-    //run a build for script and css
-    
-    var renderConfig = $z.copy($z.config.build);
-    delete renderConfig.modules;
-    renderConfig.name = structureId;
-    //renderConfig.exclude = includedModules;
-    //renderConfig.include = ['css!>>!'];
-    
-    renderConfig.out = function(css) {
-      //console.log(css);
-      //cssStream.end(css);
-    }
-    delete renderConfig.appDir;
-    delete renderConfig.dir;
-    renderConfig.baseUrl = 'www/' + renderConfig.baseUrl;
-    renderConfig.config.is = $z.copy(renderConfig.config.is);
-    renderConfig.config.is.node = false;
-    renderConfig.isExclude = (renderConfig.isExclude || []).concat(['node']);
-    //requirejs.optimize(renderConfig);
-    
-    //script build
-    /* renderConfig.out = function(script) {
-      dynamicResources.cache[jsName] = script;
-      dynamicResources.generating[jsName](script);
-      delete dynamicResources.generating[jsName];
-    }
-    requirejs.optimize(renderConfig); */
-    
-  }
-  
-  return {
-    css: cssStream,
-    js: jsStream
-  };
-}
-
-var resourceStreams = {};
-var resourceCache = {};
-
-/*
- * ResourceStream class
- *
- * Creates a resource stream buffer for dynamic resource generation.
- * While the generation is happening, connections are accepted, and
- * then the resources are streamed along those connections while
- * generation is still in progress.
- *
- * On generation completion, the stream is closed, and the buffer
- * is copied into the resourceCache.
- * 
- */
-var ResourceStream = {
-  //implement: [$z.Constructor],
-  construct: function(url) {
-    this.buffer = '';
-    this.url = url;
-    resourceStreams[url] = this;
-    this.streams = [];
-  },
-  prototype: {
-    endStreams: function(chunk) {
-      if (typeof chunk == 'string')
-        for (var i = 0; i < this.streams.length; i++)
-          this.streams[i].end(chunk);
-      delete this.streams;
-    },
-    writeStreams: function(chunk) {
-      for (var i = 0; i < this.streams.length; i++)
-        this.streams[i].write(chunk);
-    },
-    __attach: function(res) {
-      this.streams.push(res);
-      this.writeStreams(this.buffer);
-      if (this.closed)
-        this.endStreams();
-    },
-    __write: function(chunk) {
-      this.writeStreams(chunk);
-      this.buffer += chunk;
-    },
-    __end: function(chunk) {
-      
-      var buffer = $z.css.buffer;
-      for (var c in buffer)
-        this.buffer += buffer[c];
-      
-      if (typeof chunk == 'string') {
-        this.endStreams(chunk);
-        this.buffer += chunk;
-      }
-      else
-        this.endStreams();
-        
-      this.closed = true;
-      
-      delete resourceStreams[this.url];
-      resourceCache[this.url] = this.buffer;
-    }
-  }
-};
-
-$z.render.renderArray = function(structure, options, write, complete) {
+zest.render.renderArray = function(structure, options, write, complete) {
   
   var curRender = 0;
   var completed = {};
@@ -619,7 +687,7 @@ $z.render.renderArray = function(structure, options, write, complete) {
   for (var i = 0; i < len; i++) (
     function initiate(i) {
       buffer[i] = '';
-      self.renderItem(structure[i], options, function(chunk) {
+      self.renderItem(structure[i], i == len - 1 ? options : $z.extend({}, options), function(chunk) {
         //write to live or buffer
         if (curRender == i)
           write(chunk)
@@ -649,7 +717,50 @@ $z.render.renderArray = function(structure, options, write, complete) {
   )(i);
 }
 
-$z.render.renderComponentTemplate = function(component, options, write, complete) {
+zest.render.renderComponentTemplate = function(component, options, write, complete, noDelay) {
+  if (zest.config.renderDelay && !noDelay) {
+    var self = this;
+    return setTimeout(function() {
+      self.renderComponentTemplate(component, options, write, complete, true);
+    }, zest.config.renderDelay);
+  }
+  
+  var cssIds;
+  var moduleId;
+  
+  if ((moduleId = $z.getModuleId(component)))
+    //have a moduleId, see if we are dependent on any css
+    cssIds = cssDependencies[moduleId.substr(0, 3) == 'cs!' ? moduleId.substr(3) : moduleId];
+    
+  cssIds = cssIds || [];
+  
+  var pageCSSIds = options.global.pageCSSIds = options.global.pageCSSIds || [];
+  //filter the cssIds to unique
+  for (var i = 0; i < cssIds.length; i++) {
+    if (pageCSSIds.indexOf(cssIds[i]) != -1)
+      cssIds.splice(i, 1);
+    else
+      pageCSSIds.push(cssIds[i]);
+  }
+  
+  var css;
+  if (component.css)
+    css = typeof component.css == 'function' ? component.css(options) : component.css;
+  
+  // render the style attachment if necessary
+  if (options.id || css || (cssIds && cssIds.length)) {
+    //normalize css paths to the baseurl
+    if (moduleId)
+      css = normalize(css, requirejs.toUrl(moduleId), zest.baseUrl);
+    write("\n<script>" +
+      "$z.style('" + options.id + "'"
+        + (cssIds.length ? ", " + JSON.stringify(cssIds) : '')
+        + (css ? ", '" + escape(css || '') + "'" : "")
+        + ");"
+      + "</script>"
+      //+ "<style>" + (css || '') + "</style>"      
+      );
+  }
 
   // Render the template
   var html = typeof component.template == 'function' ? component.template(options) : component.template;
@@ -662,7 +773,10 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
   var regions = html.match(/\{\`\w+\`\}/g);
   var renderArray = [html];
   
-  if (regions)
+  var regionOptions;
+  
+  if (regions) {
+    regionOptions = $z.extend({}, options, { id: 'IGNORE', type: 'IGNORE' });
     for (var i = 0; i < regions.length; i++)
       for (var j = 0; j < renderArray.length; j++) {
         if (typeof renderArray[j] == 'string' && renderArray[j].indexOf(regions[i]) != -1) {
@@ -672,19 +786,18 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
           renderArray.splice(j + 1, 0, split[1]);
           
           var regionStructure = component[regionName] || options[regionName];
-          
-          delete options.id;
-          delete options.type;
-          
-          if (typeof regionStructure == 'function' && !regionStructure.template)
-            regionStructure = regionStructure.call(component, options);
+                    
+          if (typeof regionStructure == 'function' && !regionStructure.template) {
+            regionStructure = regionStructure.call(component, regionOptions);
+          }
           
           renderArray.splice(j + 1, 0, regionStructure);
         }
       }
+  }
   
   //render
-  this.renderArray(renderArray, options, write, complete);
+  this.renderArray(renderArray, regionOptions || options, write, complete);
   
 }
 
@@ -698,78 +811,102 @@ $z.render.renderComponentTemplate = function(component, options, write, complete
  * $z.attach('def', {..options..});
  *
  */
-$z.render.renderDynamicComponent = function(component, options, write, complete) {
-  this.renderStaticComponent(component, options, write, function() {
-    var moduleId = $z.getModuleId(component, true);
-    
-    var global = options.global;
-    var _options = options;
-    global._piped = global._piped || {};
-    
-    // Run piping
-    options = component.pipe ? component.pipe(options) || {} : {};
-    
-    //only pipe global if a global pipe has been specially specified
-    //piping the entire options global is lazy and ignored
-    if (options.global == _options.global)
-      delete options.global;
-    else {
-      //check if we've already piped a global, and if so, don't repipe
-      for (var p in options.global)
-        if (global._piped[p])
-          delete options.global[p];
-        else
-          global._piped[p] = true;
-    }
-    
+var escape = function(content) {
+  return content.replace(/(["'\\])/g, '\\$1')
+    .replace(/[\f]/g, "\\f")
+    .replace(/[\b]/g, "\\b")
+    .replace(/[\n]/g, "\\n")
+    .replace(/[\t]/g, "\\t")
+    .replace(/[\r]/g, "\\r");
+}
+zest.render.renderAttach = function(component, options, write, complete) {
+  // run attachment
+  var _options = options;
+  options.global._piped = options.global._piped || {};
+  
+  // Run piping
+  options = component.pipe ? component.pipe(options) || {} : {};
+  
+  //only pipe global if a global pipe has been specially specified
+  //piping the entire options global is lazy and ignored
+  if (options.global == _options.global)
+    delete options.global;
+  else {
+    //check if we've already piped a global, and if so, don't repipe
+    for (var p in options.global)
+      if (_options.global._piped[p])
+        delete options.global[p];
+      else
+        _options.global._piped[p] = true;
+  }
+  
+  var moduleId = $z.getModuleId(component);
+  
+  if (typeof component.attach === 'string') {
     //separate attahment module
-    if (typeof component.attach == 'string') {
+    var attachId = zest.req.toUrl(attach.toAbsModuleId(component.attach, moduleId));
+    
+    //nb do we need attach! here?
+    write("<script>" +
+      "$z.attach('" + _options.id + "', 'zest/attach!" + attachId + "', " + JSON.stringify(options) + ");" +
+      "</script>\n");
       
-      var attachId = $z.req.toUrl($z.attach.toAbsModuleId(component.attach, moduleId));
-      
-      write("\n<script>\n" +
-        "$z.attach('zest/attach!" + attachId + "', " + JSON.stringify(options) + ");\n" +
+    complete();
+  }
+  //lazy attachment (mixed)
+  else {
+    if (moduleId) {
+      // hidden attachment - better (i think)
+      if (!zest.config.explicitAttachment) {
+        write("<script>" +
+          "$z.attach('" + _options.id + "', '" + (zest.config.dynamicAttachment ? "zest/attach!" : "") + moduleId + "', " + JSON.stringify(options) + ");" +
+        "</script>\n");
+        complete();
+      }
+      else {
+        // explicitly show attachment for debugging
+        attach.createAttachment(moduleId, function(attachDef) {
+          write("<script>" +
+            "$z.attach('" + _options.id + "', " + JSON.stringify(attachDef.requires) + ", " + "function(" + attachDef.dependencies.join(', ') + ") {\n" +
+              "return " + attachDef.definition + ";" +
+            "}" + ", " + JSON.stringify(options) + ");\n" + 
+          "</script>\n");
+          
+          complete();
+        });
+      }
+    }
+    else {
+      write("<script>" +
+        "$z.attach('" + _options.id + "', ['zest'], function($z) {\n" +
+          "return " + attach.serializeComponent(component) + ";\n" +
+        "}" + ", " + JSON.stringify(options) + ");" +
         "</script>\n");
       
       complete();
     }
-    
-    //lazy attachment (mixed)
-    else if (typeof component.attach == 'function') {
-      if (moduleId) {
-        // hidden attachment - better (i think)
-        if (!$z.config.explicitAttachment || !$z.config.devAttachment) {
-          write("\n<script>\n" +
-            "$z.attach('" + ($z.config.devAttachment ? "zest/attach!" : "") + moduleId + "', " + JSON.stringify(options) + ");\n" +
-          "</script>\n");
-          complete();
-        }
-        else {
-          // explicitly show attachment for debugging
-          $z.attach.createAttachment(moduleId, function(attachDef) {
-            write("\n<script>\n" +
-              "$z.attach(" + JSON.stringify(attachDef.requires) + ", " + "function(" + attachDef.dependencies.join(', ') + ") {\n" +
-                "return " + attachDef.definition + ";\n" +
-              "}" + ", " + JSON.stringify(options) + ");\n" + 
-            "</script>\n");
-            
-            complete();
-            
-          });
-        }
-      }
-      else {
-        write("\n<script>\n" +
-          "$z.attach(['zest'], function($z) {\n" +
-            "return " + $z.attach.serializeComponent(component) + ";\n" +
-          "}" + ", " + JSON.stringify(options) + ");\n" +
-          "</script>\n");
-        
-        complete();
-      }
-    }
-    
-    else
-      complete();
-  });
+  }
 }
+
+/*
+ * Automatically creates the http server from config only
+ *
+ */
+zest.createServer = function(appDir) {
+  zest.init(appDir || process.cwd(), zest.startServer);
+}
+
+/*
+ * Alternative usage for connect / express other frameworks
+ *
+ * var server = connect();
+ * zest.init(config, function() {
+ *   server.use(zest.server);
+ *   server.listen(8080);
+ * });
+ *
+ */
+
+//running as the main script - start the server
+if (require.main == module)
+  zest.createServer(process.argv[2] || process.cwd());
