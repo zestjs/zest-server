@@ -9,11 +9,11 @@
   },
   "main": "./zest-server.js",
   "dependencies": {
-    "requirejs": ">=2.0.2",
+    "requirejs": ">=2.1.0",
     "node-static": ">=0.5.9"
   },
-  "scripts": {
-    "zestmon": "nodemon zest-server.js",
-    "zest": "node zest.js"
+  "bin": {
+    "zestmon": "nodemon ./zest-server.js",
+    "zest": "node ./zest.js"
   }
 }
