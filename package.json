@@ -12,5 +12,7 @@
     "requirejs": ">=2.1.0",
     "node-static": ">=0.5.9"
   },
-  "bin": "./zest-server.js"
+  "bin": {
+    "zest": "./zest-server.js"
+  }
 }
