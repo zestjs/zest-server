@@ -6,6 +6,8 @@
  * zest start [configPath]
  * zest start-nodemon [configPath]
  *
+ * zest create [dir]
+ *
  */
 
 
@@ -20,17 +22,27 @@ if (args.length == 0)
 
 switch (args[0]) {
   case 'start':
-    startZest(args[1], false);
+    zestStart(args[1], false);
     break;
   case 'start-nodemon':
-    startZest(args[1], true);
+    zestStart(args[1], true);
     break;
+  case 'create':
+    zestCreate(args[1]);
   default:
     console.log('Unrecognised command "' + args[0] + '".');
     break;
 }
 
-function startZest(configPath, nodemon) {
+function zestCreate(createPath) {
+  var createPath = path.resolve(createPath, '../');
+  var createName = path.dirname(path.resolve(createPath));
+ 
+  //calls 'volo create [createName] zestjs/zest-template'
+  pipeStd(spawn(getVoloPath(), ['create', createName, 'zestjs/zest-template'], { cwd: createPath }));
+}
+
+function zestStart(configPath, nodemon) {
   var isDir = !configPath || configPath && configPath.substr(configPath.length - 1, 1) == '/';
   configPath = configPath ? path.resolve(configPath) : process.cwd();
   if (isDir && configPath.substr(configPath.length - 1, 1) != '/')
@@ -38,32 +50,39 @@ function startZest(configPath, nodemon) {
   var configDir = isDir ? configPath : path.dirname(configPath);
   
   //for nodemon, rerun the current script through nodemon to get monitoring
-  if (nodemon) {
-    var nodemon = spawn('nodemon', [module.filename, 'start', configPath], { cwd: configDir });
-    nodemon.stdout.on('data', function(data) {
-      process.stdout.write(data);
-    });
-    nodemon.stderr.on('data', function(data) {
-      process.stderr.write(data);
-    });
-  }
+  if (nodemon)
+    return pipeStd(spawn('nodemon', [module.filename, 'start', configPath], { cwd: configDir }));
   
   var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest');
 
   if (fs.existsSync(localBinPath)) {
     //run the local version of zest through the local bin
     console.log('Running zest server as a local module');
-    var server = spawn(localBinPath, [configPath], { cwd: configDir });
-    server.stdout.on('data', function(data) {
-      process.stdout.write(data);
-    });
-    server.stderr.on('data', function(data) {
-      process.stderr.write(data)
-    });
+    pipeStd(spawn(localBinPath, [configPath], { cwd: configDir }));
   }
   else {
     //run the version of zest in the current directory (this version of zest server)
     var zest = require('./zest-server');
     zest.createServer(configPath);
   }
+}
+
+
+
+/* helper functions */
+function pipeStd(p) {
+  p.stdout.on('data', function(data) {
+    process.stdout.write(data);
+  });
+  p.stderr.on('data', function(data) {
+    process.stderr.write(data);
+  });
+}
+
+function getVoloPath() {
+  var localBinPath = path.resolve(path.dirname(module.filename), 'node_modules/.bin/volo');
+  if (fs.existsSync(localBinPath))
+    return localBinPath;
+  else
+    return 'volo';
 }
