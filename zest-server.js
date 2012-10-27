@@ -1,12 +1,45 @@
+#!/usr/bin/env node
+
 /*
  * Zest Server
  *
- * Can be required as a node module with the following methods:
- * render(moduleId, options);
- * render(pageId, moduleId, options);
- * config(config, callback);
- * serve(res, res, [next]);
  * 
+ */
+
+/*
+ * Best method to start is to use the 'zest' executable provided
+ * by a global install.
+ *
+ * It will still run a local zest server install if set at a specific
+ * version
+ *
+ * Usage:
+ *
+ * zest
+ *   Will look for config file at zest.json, in current folder
+ * 
+ * zest configName.json
+ *   Will look for config file at given name, relative to current folder
+ *
+ */
+
+/*
+ * For use within NodeJS:
+ *
+ * zest.createServer(configFilePath || config, [completeFn]);
+ *
+ * Will handle everything.
+ */
+  
+/*
+ * Alternative usage for within connect / express other frameworks
+ *
+ * var server = connect();
+ * zest.init(configPath | config, function() {
+ *   server.use(zest.server);
+ *   server.listen(8080);
+ * });
+ *
  */
   
 var fs = require('fs'),
@@ -214,7 +247,7 @@ zest.init = function(config, complete) {
   console.log('Loading RequireJS dependencies');
   zest.require(['require', 'zest', 'css', '$zest-server/attach', 'require-css/normalize'], function(req, _$z, _css, _attach, _normalize) {
     zest.req = req;
-    zest.baseUrl = req.toUrl('.');
+    zest.baseUrl = zest.require.toUrl('.');
     $z = _$z;
     css = _css;
     attach = _attach;
@@ -496,11 +529,12 @@ var getJSONConfigFile = function(file) {
 var loadConfig = function(config) {
   //load configuration
   if (typeof config == 'string') {
+    var isDir = config.substr(config.length - 1, 1) == '/';
     //config file path is taken to be app directory
-    defaultConfig.appDir = path.resolve(config);
+    defaultConfig.appDir = isDir ? path.resolve(config) : path.dirname(path.resolve(config));
     defaultConfig.require.server.paths['$'] = defaultConfig.appDir;
     //load config as a json file
-    return loadConfig(getJSONConfigFile(path.resolve(config, 'zest.json')));
+    return loadConfig(getJSONConfigFile(isDir ? path.resolve(config, 'zest.json') : path.resolve(config)));
   }
   
   if (setConfig)
@@ -892,21 +926,10 @@ zest.render.renderAttach = function(component, options, write, complete) {
  * Automatically creates the http server from config only
  *
  */
-zest.createServer = function(appDir) {
-  zest.init(appDir || process.cwd(), zest.startServer);
+zest.createServer = function(appDir, complete) {
+  zest.init(appDir || process.cwd(), function() {
+    zest.startServer();
+    if (complete)
+      complete();
+  });
 }
-
-/*
- * Alternative usage for connect / express other frameworks
- *
- * var server = connect();
- * zest.init(config, function() {
- *   server.use(zest.server);
- *   server.listen(8080);
- * });
- *
- */
-
-//running as the main script - start the server
-if (require.main == module)
-  zest.createServer(process.argv[2] || process.cwd());
