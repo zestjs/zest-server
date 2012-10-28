@@ -144,7 +144,7 @@ var defaultConfig = {
         is: 'require-is/is',
         css: 'require-css/css',
         less: 'require-less/less',
-        rest: 'rest/rest'
+        http: 'rest/http'
       }
     },
   
