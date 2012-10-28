@@ -29,17 +29,18 @@ switch (args[0]) {
     break;
   case 'create':
     zestCreate(args[1]);
+    break;
   default:
     console.log('Unrecognised command "' + args[0] + '".');
     break;
 }
 
 function zestCreate(createPath) {
-  var createPath = path.resolve(createPath, '../');
-  var createName = path.dirname(path.resolve(createPath));
+  var createDir = path.resolve(createPath, '../');
+  var createName = path.basename(path.resolve(createPath));
  
   //calls 'volo create [createName] zestjs/zest-template'
-  pipeStd(spawn(getVoloPath(), ['create', createName, 'zestjs/zest-template'], { cwd: createPath }));
+  pipeStd(spawn(getVoloPath(), ['create', createName, 'zestjs/zest-template'], { cwd: createDir }));
 }
 
 function zestStart(configPath, nodemon) {

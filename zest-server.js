@@ -134,9 +134,7 @@ var defaultConfig = {
   require: {
     config: {
       'require-is/is': {
-        client: true,
-        render: true,
-        node: false
+        render: true
       }
     },
     paths: {
@@ -145,7 +143,8 @@ var defaultConfig = {
       '*': {
         is: 'require-is/is',
         css: 'require-css/css',
-        less: 'require-less/less'
+        less: 'require-less/less',
+        rest: 'rest/rest'
       }
     },
   
