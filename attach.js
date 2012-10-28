@@ -11,7 +11,7 @@
  * 
  */
 var r = require;
-define(['require', 'zest', 'rest'], function(require, $z, rest) {
+define(['require', 'zest', 'http'], function(require, $z, http) {
   var attach = {};
   
   //for attaching modules loaded by plugins, we need to provide
@@ -213,7 +213,7 @@ define(['require', 'zest', 'rest'], function(require, $z, rest) {
         }
         //otherwise load from file normally
         if (!parser)
-          rest.get(require.toUrl(componentModuleId), function(code) {
+          http.get(require.toUrl(componentModuleId), function(code) {
             complete(generateAttachment(att, component, code));
           });
       });
