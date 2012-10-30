@@ -1,0 +1,141 @@
+{
+  environment: 'dev',
+  
+  //environment-specific configs, extend base config
+  environments: {
+    production: {
+      
+    },
+    dev: {
+      fileExpires: 0,
+      
+      debugInfo: true,
+      logRender: true,
+      renderDelay: 100,
+      staticLatency: 100,
+      
+      /* Application Server */
+      modules: {
+        //'cs!$zest-server/core-module': {}
+      }
+    }
+  },
+  
+  zestLayer: 'zest/build-layer',
+  
+  buildLayers: {
+    'zest/build-layer': {
+      name: '$zest-server/attachment',
+      include: ['zest/zest', 'selector']
+    }
+  },
+  
+  /* Layer Building */
+  rebuildZestLayer: true,
+  
+  /* Attachment */
+  explicitAttachment: false, //show attachment object in html
+  dynamicAttachment: false, //when outside a build, generate the attach! variant client-side
+  
+  /* File Server */
+  serveFiles: true,
+  fileExpires: 500,
+  
+  /* https and spdy support */
+  https: {
+    enable: false,
+    key: ''
+  },
+  spdy: false,
+  
+  /* Page Load Testing */
+  renderDelay: 0,
+  staticLatency: 0,
+  debugInfo: false,
+  
+  /* Page Rendering - default options */
+  page: {
+    //structure to render the html page with (html template effectively)
+    pageStructure: 'cs!$zest-server/html',
+    
+    //page options, structure and options are body structure, as set by route
+    id: null,
+    title: '',
+    layers: [], //by default starts with zestLayer
+    main: '',
+    //requireConfig: zest.config.client,
+    options: {},
+    global: {} //default global options
+  },
+  
+  /* Application Server */
+  loadCoreModule: true,
+  modules: {
+    //'cs!$zest-server/core-module': {}
+  },
+  
+  /* Require Config */
+  //appDir: process.cwd(),
+  publicDir: 'www',
+  publicBuildDir: 'www-built',
+  baseDir: 'lib',
+  
+  require: {
+    config: {
+      'require-is/is': {
+        render: true
+      }
+    },
+    paths: {
+    },
+    map: {
+      '*': {
+        is: 'require-is/is',
+        css: 'require-css/css',
+        less: 'require-less/less',
+        http: 'rest/http'
+      }
+    },
+  
+    //server require config
+    server: {
+      // base url is publicDir/baseUrl
+      context: 'shared',
+      paths: {
+        //'$zest-server': __dirname,
+        //'$': process.cwd()
+      },
+      map: {
+        '*': {
+          selector: 'empty',
+          jquery: 'empty'
+        }
+      },
+      config: {
+        'require-is/is': {
+          client: false,
+          render: true,
+          node: true
+        }
+      }
+    },
+  
+    //client require config
+    client: {
+      // base url is baseUrl from base config
+    },
+  
+    //build require config
+    //when we do a build, zest core is dropped into the zest/core file
+    build: {
+      // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
+      modules: [
+        {
+          name: 'test',
+          include: 'test',
+          exclude: ['zest/core']
+        }
+      ]
+    }
+  }
+}

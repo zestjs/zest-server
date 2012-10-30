@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /*
  * Zest Server
  *
@@ -41,7 +39,6 @@
  * });
  *
  */
-  
 var fs = require('fs'),
   nodeStatic = require('node-static'),
   requirejs = require('requirejs'),
@@ -50,148 +47,18 @@ var fs = require('fs'),
   
 var zest = exports;
 
-var defaultConfig = {
-  environment: 'dev',
-  
-  //environment-specific configs, extend base config
-  environments: {
-    production: {
-      
-    },
-    dev: {
-      fileExpires: 0,
-      
-      debugInfo: true,
-      logRender: true,
-      renderDelay: 100,
-      staticLatency: 100,
-      
-      /* Application Server */
-      modules: {
-        //'cs!$zest-server/core-module': {}
-      }
-    }
-  },
-  
-  zestLayer: 'zest/build-layer',
-  
-  buildLayers: {
-    'zest/build-layer': {
-      name: '$zest-server/attachment',
-      include: ['zest/zest', 'selector']
-    }
-  },
-  
-  /* Layer Building */
-  rebuildZestLayer: true,
-  
-  /* Attachment */
-  explicitAttachment: false, //show attachment object in html
-  dynamicAttachment: false, //when outside a build, generate the attach! variant client-side
-  
-  /* File Server */
-  serveFiles: true,
-  fileExpires: 500,
-  
-  /* https and spdy support */
-  https: {
-    enable: false,
-    key: ''
-  },
-  spdy: false,
-  
-  /* Page Load Testing */
-  renderDelay: 0,
-  staticLatency: 0,
-  debugInfo: false,
-  
-  /* Page Rendering - default options */
-  page: {
-    //structure to render the html page with (html template effectively)
-    pageStructure: 'cs!$zest-server/html',
-    
-    //page options, structure and options are body structure, as set by route
-    id: null,
-    title: '',
-    layers: [], //by default starts with zestLayer
-    main: '',
-    //requireConfig: zest.config.client,
-    options: {},
-    global: {} //default global options
-  },
-  
-  /* Application Server */
-  modules: {
-    //'cs!$zest-server/core-module': {}
-  },
-  
-  /* Require Config */
-  appDir: process.cwd(),
-  publicDir: 'www',
-  libDir: 'lib',
-  libBuildDir: 'blib',
-  
-  require: {
-    config: {
-      'require-is/is': {
-        render: true
-      }
-    },
-    paths: {
-    },
-    map: {
-      '*': {
-        is: 'require-is/is',
-        css: 'require-css/css',
-        less: 'require-less/less',
-        http: 'rest/http'
-      }
-    },
-  
-    //server require config
-    server: {
-      // base url is publicDir/libDir
-      context: 'shared',
-      nodeRequire: require,
-      paths: {
-        '$zest-server': __dirname,
-        '$': process.cwd()
-      },
-      map: {
-        '*': {
-          selector: 'empty',
-          jquery: 'empty'
-        }
-      },
-      config: {
-        'require-is/is': {
-          client: false,
-          render: true,
-          node: true
-        }
-      }
-    },
-  
-    //client require config
-    client: {
-      // base url is libDir
-    },
-  
-    //build require config
-    //when we do a build, zest core is dropped into the zest/core file
-    build: {
-      // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
-      modules: [
-        {
-          name: 'test',
-          include: 'test',
-          exclude: ['zest/core']
-        }
-      ]
-    }
-  }
-};
 
+var getJSONConfigFile = function(file) {
+  return eval('var c,require=function(o){return typeof o=="object"?c=o:c;},requirejs=require.config=require;(' +
+    fs.readFileSync(file, 'utf-8') + ');');
+}
+var getCSONConfigFile = function(file) {
+  return require('coffee-script').eval('(' + fs.readFileSync(file, 'utf-8') + ')');
+}
+var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
+
+defaultConfig.require.server.paths['$zest-server'] = __dirname;
+defaultConfig.require.server.nodeRequire = require;
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -266,107 +133,32 @@ zest.init = function(config, complete) {
       next();
     });
     
-    //load module config
-    var moduleConfig = [];
-    var modules = [];
+    //load core module if necessary
+    zest.modules = [];
     makeServer.on(function(next) {
-      console.log('Loading Modules');
-      var moduleConfigRequires = [];
-      
-      for (var module in zest.config.modules) {
-        modules.push(module);
-        if (typeof zest.config.modules[module] == 'string') {
-          moduleConfigRequires.push(module);
-          moduleConfig.push(undefined);
-        }
-        else {
-          moduleConfigRequires.push('');
-          moduleConfig.push(zest.config.modules[module]);
-        }
-      }
-      zest.require(moduleConfigRequires, function() {
-        for (var i = 0; i < arguments.length; i++)
-          moduleConfig[i] = moduleConfig[i] || arguments[i];
-          
-        next();
-      });
+      if (zest.config.loadCoreModule)
+        loadModule('cs!$zest-server/core-module', true, next);
+      else
+        return next();
     });
     
     //load modules
     makeServer.on(function(next) {
-      //default module is zest core module
-      if (modules.length == 0)
-        modules.push('cs!$zest-server/core-module');
-      //store the modules for direct access
-      zest.modules = {};
-      zest.require(modules, function() {
-        for (var i = 0; i < arguments.length; i++) {
-          var module = arguments[i];
-          //instantiate with config
-          if (typeof module == 'function')
-            module = module(moduleConfig[i]);
-          if (module.routes)
-            $z.router.addRoutes(module.routes);
-          if (module.handler)
-            zest.handlers.on(function() {
-              module.handler.apply(module, arguments);
-            });
-          zest.modules[modules[i]] = module;
-        }
+      if (zest.config.modules)
+        loadModules(zest.config.modules, next)
+      else
         next();
-      });
-    });
-    
-    //include module-defined zest configs
-    makeServer.on(function(next) {
-      for (var module in zest.modules) {
-        if (!zest.modules[module].zestConfig)
-          continue;
-        
-        var moduleConfig = zest.modules[module].zestConfig;
-        
-        //compute environment config as outModuleConfig
-        var outModuleConfig = moduleConfig;
-        if (moduleConfig.environments) {
-          outModuleConfig = moduleConfig.environments[zest.config.environment] || {};
-          delete moduleConfig.environments;
-          $z.extend(outModuleConfig, moduleConfig, 'DPREPEND');
-        }
-        
-        //save environment config back for reference
-        zest.modules[module].zestConfig = outModuleConfig;
-        
-        //add module config to main zest config
-        $z.extend(zest.config, outModuleConfig, {'*': 'DAPPEND', 'require': 'IGNORE'});
-        
-        //compute require config with defaults, then add into main zest config
-        if (outModuleConfig.require) {
-          var _extendRules = {'*': 'DPREPEND', 'client': 'IGNORE', 'server': 'IGNORE', 'build': 'IGNORE'};
-          
-          $z.extend(zest.config.require.client, outModuleConfig.require, _extendRules);
-          $z.extend(zest.config.require.server, outModuleConfig.require, _extendRules);
-          $z.extend(zest.config.require.build, outModuleConfig.require, _extendRules);
-          
-          $z.extend(zest.config.require.client, outModuleConfig.require.client || {}, 'DPREPEND');
-          $z.extend(zest.config.require.server, outModuleConfig.require.server || {}, 'DPREPEND');
-          $z.extend(zest.config.require.build, outModuleConfig.require.build || {}, 'DPREPEND');
-          
-          //update server require
-          zest.require = requirejs.config(zest.config.require.server);
-        }
-      }
-      next();
     });
     
     //build the core if necessary
     makeServer.on(function(next) {
-      if (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir, zest.config.zestLayer + '.js')))
+      if (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, zest.config.zestLayer + '.js')))
         return next();
       
       console.log('Building core files');
       var build = {
-        baseUrl: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir),
-        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.libDir, zest.config.zestLayer + '.js'),
+        baseUrl: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir),
+        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, zest.config.zestLayer + '.js'),
         paths: {
           '$zest-server': __dirname
         },
@@ -457,11 +249,12 @@ zest.init = function(config, complete) {
         req.page.requireConfig = $z.extend(req.page.requireConfig || {}, zest.config.require.client, 'DREPLACE');
         
         //lookup the module name responsible for the page route
-        for (var module in zest.modules)
-          if (zest.modules[module].routes[req.page.options._route]) {
-            req.page.module = zest.modules[module];
+        for (var i = 0; i < zest.modules.length; i++) {
+          if (zest.modules[i].instance.routes[req.page.options._route]) {
+            req.page.module = zest.modules[i].instance;
             break;
           }
+        }
         
         next();
       });
@@ -504,6 +297,186 @@ zest.init = function(config, complete) {
   }, reqErr);
 }
 
+/*
+ * loadModule
+ *
+ * Loads a zest server module.
+ *
+ * Module Spec::
+ *
+ * From configuration environment:
+ * modules: {
+ *   'moduleId (in requirejs)': {
+ *     //...configuration object.. (can also be a string for a file to find it at, or 'true' for no config)
+ *   }
+ * }
+ *
+ * The module itself can have the following:
+ *
+ * 1) it can be a function of configuration (optionally)
+ *
+ * 2) routes. object. defines routes for this module, as path -> route pairs.
+ *    routes can be structure objects, structure reference strings, or path aliases for aliasing
+ *
+ * 3) handler function. function(req, res, next) as is normal in nodejs
+ *
+ * 4) zestConfig object. allows for adding configuration to the global config.
+ *    also allows for adding sub-modules as dependencies.
+ *
+ *    modules: {
+ *      'moduleId': true
+ *      'moduleId': {}
+ *      'moduleId': 'configId'
+ *    }
+ *
+ * 5) Sub modules are added based on their config. So far as configurations are unique, modules
+ *    are added multiple times.
+ *    In this way, modules are seen as 'generators' over straightforwad routes
+ *    Straightforward routing is still provided by the 'true' option.
+ *
+ */
+
+//deep compare two configuration objects to see if they match
+//assumed as config json only, so no classes or functions on the objects
+var deepCompareConfig = function(a, b) {
+  for (var p in a) {
+    if (typeof a[p] == 'object' && !deepCompare(a[p], b[0]))
+      return false;
+    else if (a[p] !== b[p])
+      return false;
+  }
+  return true;
+}
+
+var loadModule = function(moduleId, config, complete) {
+  //loads a zest server module
+  var doLoad = $z.fn('ASYNC');
+  
+  //load module
+  var module;
+  doLoad.on(function(next) {
+    console.log('Loading module: ' + moduleId);
+    zest.require([moduleId], function(_module) {
+      module = _module;
+      next();
+    });
+  });
+  
+  //load config
+  doLoad.on(function(next) {
+    if (typeof config == 'string')
+      zest.require([config], function(_config) {
+        config = _config;
+        next();
+      });
+    else if (typeof config == 'boolean') {
+      config = {};
+      next();
+    }
+    else
+      next();
+  });
+  
+  //instantiate module
+  var instance;
+  doLoad.on(function(next) {
+    //check if this config / module combination already exists
+    for (var i = 0; i < zest.modules.length; i++) {
+      if (zest.modules[i].moduleId != moduleId)
+        continue;
+      //deep check the config matches
+      if (deepCompareConfig(zest.modules[i].config, config)) {
+        //same config - ignore module inclusion
+        return next();
+      }
+    }
+    
+    //instantiate
+    if (typeof module == 'function')
+      instance = module(config);
+    else
+      instance = module;
+    
+    //add routes and handlers
+    if (instance.routes)
+      $z.router.addRoutes(instance.routes);
+    if (instance.handler)
+      zest.handlers.on(function() {
+        instance.handler.apply(instance, arguments);
+      });
+    
+    //store module instance info
+    zest.modules.push({
+      moduleId: moduleId,
+      config: config,
+      instance: instance
+    });
+    
+    next();
+  });
+  
+  //include module-defined zest config
+  doLoad.on(function(next) {
+    //if no module instance or config, ignore
+    if (!instance || !instance.zestConfig)
+      return next();
+    
+    var moduleConfig = instance.zestConfig;
+    
+    //compute environment config as outModuleConfig
+    var outModuleConfig = moduleConfig;
+    if (moduleConfig.environments) {
+      outModuleConfig = moduleConfig.environments[zest.config.environment] || {};
+      delete moduleConfig.environments;
+      $z.extend(outModuleConfig, moduleConfig, 'DPREPEND');
+    }
+    
+    //save environment config back for reference
+    instance.zestConfig = outModuleConfig;
+    
+    //add module config to main zest config
+    $z.extend(zest.config, outModuleConfig, {'*': 'DAPPEND', 'require': 'IGNORE'});
+    
+    //compute require config with defaults, then add into main zest config
+    if (outModuleConfig.require) {
+      var _extendRules = {'*': 'DPREPEND', 'client': 'IGNORE', 'server': 'IGNORE', 'build': 'IGNORE'};
+      
+      $z.extend(zest.config.require.client, outModuleConfig.require, _extendRules);
+      $z.extend(zest.config.require.server, outModuleConfig.require, _extendRules);
+      $z.extend(zest.config.require.build, outModuleConfig.require, _extendRules);
+      
+      $z.extend(zest.config.require.client, outModuleConfig.require.client || {}, 'DPREPEND');
+      $z.extend(zest.config.require.server, outModuleConfig.require.server || {}, 'DPREPEND');
+      $z.extend(zest.config.require.build, outModuleConfig.require.build || {}, 'DPREPEND');
+      
+      //update server require
+      zest.require = requirejs.config(zest.config.require.server);
+    }
+    
+    //check for any sub-modules and load them
+    if (outModuleConfig.modules)
+      loadModules(outModuleConfig.modules, next);
+    else
+      next();
+  });
+  
+  doLoad(complete);
+}
+
+var loadModules = function(modules, complete) {
+  var loadCnt = 0;
+  for (var curModule in modules)
+    loadCnt++;
+  
+  for (var curModule in modules) {
+    loadModule(curModule, modules[curModule], function() {
+      loadCnt--;
+      if (loadCnt == 0)
+        complete();
+    });
+  }
+}
+
 zest.startServer = function(port) {
   if (!setConfig)
     throw 'Configuration hasn\'t been set to start server';
@@ -519,11 +492,6 @@ zest.startServer = function(port) {
 } */
 
 var setConfig = false;
-//load requirejs configurations from files if necessary
-var getJSONConfigFile = function(file) {
-  return eval('var c,require=function(o){return typeof o=="object"?c=o:c;},requirejs=require.config=require;(' +
-    fs.readFileSync(file, 'utf-8') + ');');
-}
 //config is simply taken for the dirname where zest.json can be found
 var loadConfig = function(config) {
   //load configuration
@@ -532,8 +500,13 @@ var loadConfig = function(config) {
     //config file path is taken to be app directory
     defaultConfig.appDir = isDir ? path.resolve(config) : path.dirname(path.resolve(config));
     defaultConfig.require.server.paths['$'] = defaultConfig.appDir;
-    //load config as a json file
-    return loadConfig(getJSONConfigFile(isDir ? path.resolve(config, 'zest.json') : path.resolve(config)));
+    
+    //load cson if necessary
+    if (isDir && fs.existsSync(path.resolve(config, 'zest.cson')) || config.substr(config.length - 4, 4) == 'cson')
+      return loadConfig(getCSONConfigFile(isDir ? path.resolve(config, 'zest.cson') : path.resolve(config)));
+    //otherwise load config as a json file
+    else
+      return loadConfig(getJSONConfigFile(isDir ? path.resolve(config, 'zest.json') : path.resolve(config)));
   }
   
   if (setConfig)
@@ -580,11 +553,8 @@ var loadConfig = function(config) {
   outConfig.require = requireConfig;
   
   //set directories - cant override
-  outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libDir);
-  outConfig.require.client.baseUrl = '/' + (outConfig.mode == 'production' ? outConfig.libBuildDir : outConfig.libDir);
-  outConfig.require.build.baseUrl = '.';
-  outConfig.require.build.appDir = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libDir);
-  outConfig.require.build.dir = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.libBuildDir);
+  outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.baseDir);
+  outConfig.require.client.baseUrl = outConfig.baseDir;
   
   return outConfig;
 }
@@ -610,13 +580,9 @@ zest.build = function(complete) {
   console.log('Running build');
   zest.config.require.build.modules = zest.config.require.build.modules || [];
   
-  var outDir = zest.config.appDir.split('/');
-  outDir.pop();
-  outDir.push('www-built');
-  outDir = outDir.join('/');
-  
-  zest.config.require.build.appDir = zest.config.appDir;
-  zest.config.require.build.dir = outDir;
+  zest.config.require.build.appDir = path.resolve(zest.config.appDir, zest.config.publicDir);
+  zest.config.require.build.dir = path.resolve(zest.config.appDir, zest.config.publicBuildDir);
+  zest.config.require.build.baseUrl = zest.config.baseDir;
   
   requirejs.optimize(zest.config.require.build, function(buildResponse) {
     console.log(buildResponse);
