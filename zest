@@ -10,10 +10,11 @@
  *
  */
 
-
 var fs = require('fs'),
   path = require('path'),
   spawn = require('child_process').spawn;
+
+var windows = process.platform == 'win32';
 
 var args = process.argv.splice(2);
 
@@ -51,15 +52,18 @@ function zestCreate(createPath) {
 }
 
 function zestStart(configPath, nodemon) {
-  var isDir = !configPath || configPath && configPath.substr(configPath.length - 1, 1) == '/';
+  var isDir = !configPath || configPath && configPath.substr(configPath.length - 1, 1) == (windows ? '\\' : '/');
   configPath = configPath ? path.resolve(configPath) : process.cwd();
-  if (isDir && configPath.substr(configPath.length - 1, 1) != '/')
-    configPath += '/';
+  if (isDir && configPath.substr(configPath.length - 1, 1) != (windows ? '\\' : '/'))
+    configPath += (windows ? '\\' : '/');
   var configDir = isDir ? configPath : path.dirname(configPath);
   
   //for nodemon, rerun the current script through nodemon to get monitoring
-  if (nodemon)
+  if (nodemon) {
+    if (windows)
+      console.log('Nodemon support for windows isnt working, contributions welcome.');
     return pipeStd(spawn(getBinPath('nodemon'), [module.filename, 'start', configPath], { cwd: configDir }));
+  }
   
   var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest');
 
@@ -88,7 +92,7 @@ function pipeStd(p) {
 }
 
 function getBinPath(binName) {
-  var localBinPath = path.resolve(path.dirname(module.filename), 'node_modules/.bin/' + binName);
+  var localBinPath = path.resolve(path.dirname(module.filename), 'node_modules/.bin/' + binName + (windows ? '.cmd' : ''));
   if (fs.existsSync(localBinPath))
     return localBinPath;
   else
