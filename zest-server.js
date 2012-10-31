@@ -53,7 +53,7 @@ var getJSONConfigFile = function(file) {
     fs.readFileSync(file, 'utf-8') + ');');
 }
 var getCSONConfigFile = function(file) {
-  return require('coffee-script').eval('(' + fs.readFileSync(file, 'utf-8') + ')');
+  return require('coffee-script').eval(fs.readFileSync(file, 'utf-8'));
 }
 var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
 
@@ -554,7 +554,7 @@ var loadConfig = function(config) {
   
   //set directories - cant override
   outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.baseDir);
-  outConfig.require.client.baseUrl = outConfig.baseDir;
+  outConfig.require.client.baseUrl = '/' + outConfig.baseDir;
   
   return outConfig;
 }

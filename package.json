@@ -12,7 +12,8 @@
     "requirejs": ">=2.1.0",
     "node-static": ">=0.5.9",
     "volo": ">=0.2.4",
-    "nodemon": ">=0.6.0"
+    "nodemon": ">=0.6.0",
+    "coffee-script": ">=1.4.0"
   },
   "bin": {
     "zest": "./zest"
