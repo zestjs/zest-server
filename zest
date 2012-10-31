@@ -31,7 +31,7 @@ switch (args[0]) {
     zestCreate(args[1]);
     break;
   case 'volo-add':
-    zestAdd(args.splice(1, args.length - 1));
+    zestVoloAdd(args.splice(1, args.length - 1));
     break;
   default:
     console.log('Unrecognised command "' + args[0] + '".');
