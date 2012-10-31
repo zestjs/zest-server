@@ -39,7 +39,7 @@ switch (args[0]) {
 }
 
 function zestVoloAdd(args) {
-  pipeStd(spawn(getBinPath('volo'), args, { cwd: process.cwd() }));
+  pipeStd(spawn(getBinPath('volo'), ['add'].concat(args), { cwd: process.cwd() }));
 }
 
 function zestCreate(createPath) {
