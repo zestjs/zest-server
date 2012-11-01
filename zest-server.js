@@ -58,9 +58,7 @@ var getCSONConfigFile = function(file) {
 var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
 
 defaultConfig.require.server.paths['$zest-server'] = __dirname;
-defaultConfig.require.server.nodeRequire = require;
 defaultConfig.require.build.paths['$zest-server'] = __dirname;
-defaultConfig.require.build.nodeRequire = require;
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -81,6 +79,7 @@ zest.init = function(config, complete) {
     zest.config = loadConfig(config);
   
   console.log('Initializing RequireJS');
+  zest.config.require.server.nodeRequire = require;
   zest.require = requirejs.config(zest.config.require.server);
   
   //set up css dependency tracking
@@ -545,7 +544,7 @@ zest.startServer = function(port) {
   if (!setConfig)
     throw 'Configuration hasn\'t been set to start server';
   http.createServer(zest.server).listen(port || zest.config.port || 8080);
-  console.log('Listing on port 8080...');
+  console.log('Listing on port ' + (port || zest.config.port || 8080) + '...');
 }
 
 /* zest.clearRequires = function() {
@@ -833,6 +832,7 @@ zest.render.renderComponentTemplate = function(component, options, write, comple
       "$z.style('" + options.id + "'"
         + (cssIds.length ? ", " + JSON.stringify(cssIds) : '')
         + (css ? ", '" + escape(css || '') + "'" : "")
+        + (component.attach ? ', true' : '')
         + ");"
       + "</script>"
       //+ "<style>" + (css || '') + "</style>"      

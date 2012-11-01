@@ -46,12 +46,17 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
   //make file url absolute
   var _baseUrl = '/' + normalize.convertURIBase(require.toUrl('.'), pathname, '/');
   
-  $z.style = function(id, cssIds, instanceCSS) {
+  $z.style = function(id, cssIds, instanceCSS, attach) {
     var scriptNode = Array.prototype.pop.call(document.getElementsByTagName('script'));
     
-    if (typeof cssIds == 'string') {
+    if (!(cssIds instanceof Array)) {
+      attach = instanceCSS;
       instanceCSS = cssIds;
       cssIds = [];
+    }
+    if (typeof instanceCSS == 'boolean') {
+      attach = instanceCSS;
+      instanceCSS = '';
     }
     
     if (id.substr(0, 1) == 'z')
@@ -90,8 +95,25 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
       else {          
         var pathname;
         
-        if (lessId)
-          css.inject(normalize(less.parse(ajaxSync(require.toUrl(filePath))), _baseUrl, pathname));
+        if (lessId) {
+          //first ensure we have the less parser
+          if (!less.parse) {
+            //load less parser dynamically in development (yes eval is evil but this doesnt happen in production)
+            var lessc = eval('(function() {var defined; var define = function(a){defined = a();}; define.amd = 1;' + ajaxSync(require.toUrl('require-less/lessc.js')) + '; return defined; })()');
+            var parser = new lessc.Parser();
+            less.parse = function(less) {
+              var css;
+              parser.parse(less, function(err, tree) {
+                if (err)
+                  throw err;
+                css = tree.toCSS();
+              });
+              //instant callback luckily
+              return css;
+            }
+          }
+          css.inject(normalize(less.parse(ajaxSync(require.toUrl(filePath + (filePath.substr(cssIds[i].length - 5, 5) != '.less' ? '.less' : '')))), _baseUrl, pathname));
+        }
         
         else
           css.inject(normalize(ajaxSync(require.toUrl(filePath + (filePath.substr(cssIds[i].length - 4, 4) != '.css' ? '.css' : ''))), _baseUrl, pathname));
@@ -111,9 +133,12 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
       $z.css.set(id, instanceCSS, true);
     
     //store attachment info for removal on attachment
-    _attachments[id] = {
-      styleNode: scriptNode
-    };
+    if (attach)
+      _attachments[id] = {
+        styleNode: scriptNode
+      };
+    else
+      scriptNode.parentNode.removeChild(scriptNode);
   }
   
   /*
