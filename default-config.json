@@ -4,15 +4,19 @@
   //environment-specific configs, extend base config
   environments: {
     production: {
-      
+      build: true,
+      rebuild: true,
+      page: {
+        layers: [] //build layers to use in production
+      }
     },
     dev: {
       fileExpires: 0,
       
       debugInfo: true,
       logRender: true,
-      renderDelay: 100,
-      staticLatency: 100,
+      renderDelay: 0,
+      staticLatency: 0,
       
       /* Application Server */
       modules: {
@@ -21,16 +25,8 @@
     }
   },
   
-  zestLayer: 'zest/build-layer',
-  
-  buildLayers: {
-    'zest/build-layer': {
-      name: '$zest-server/attachment',
-      include: ['zest/zest', 'selector']
-    }
-  },
-  
-  /* Layer Building */
+  /* Core Layer Building */
+  zestLayerInclude: ['selector'],
   rebuildZestLayer: true,
   
   /* Attachment */
@@ -48,6 +44,12 @@
   },
   spdy: false,
   
+  /* offline support */
+  offline: true,
+  iframeManifest: {
+    
+  },
+  
   /* Page Load Testing */
   renderDelay: 0,
   staticLatency: 0,
@@ -61,7 +63,8 @@
     //page options, structure and options are body structure, as set by route
     id: null,
     title: '',
-    layers: [], //by default starts with zestLayer
+    scripts: [], //by default starts with zestLayer. BLOCKING scripts
+    layers: [], //layers to include in the current page. Used for builds to load a layer instead of the file.
     main: '',
     //requireConfig: zest.config.client,
     options: {},
@@ -128,13 +131,10 @@
     //build require config
     //when we do a build, zest core is dropped into the zest/core file
     build: {
+      paths: {},
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
+      //set automatically. name, out ignored.
       modules: [
-        {
-          name: 'test',
-          include: 'test',
-          exclude: ['zest/core']
-        }
       ]
     }
   }

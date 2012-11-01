@@ -59,6 +59,8 @@ var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.js
 
 defaultConfig.require.server.paths['$zest-server'] = __dirname;
 defaultConfig.require.server.nodeRequire = require;
+defaultConfig.require.build.paths['$zest-server'] = __dirname;
+defaultConfig.require.build.nodeRequire = require;
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -150,15 +152,17 @@ zest.init = function(config, complete) {
         next();
     });
     
-    //build the core if necessary
+    //build the core if necessary -> restarts load again (used for build in dev)
     makeServer.on(function(next) {
-      if (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, zest.config.zestLayer + '.js')))
+      if (zest.config.build || zest.builtLayers || (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js'))))
         return next();
       
       console.log('Building core files');
       var build = {
+        name: '$zest-server/attachment',
+        include: ['zest/zest'].concat(zest.config.zestLayerInclude),
         baseUrl: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir),
-        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, zest.config.zestLayer + '.js'),
+        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js'),
         paths: {
           '$zest-server': __dirname
         },
@@ -169,7 +173,7 @@ zest.init = function(config, complete) {
           end: "require(['$zest-server/attachment']);"
         }
       };
-      $z.extend(build, zest.config.buildLayers[zest.config.zestLayer], 'FILL');
+      
       $z.extend(build, zest.config.require.build, {
         '*': 'FILL',
         'appDir': 'IGNORE',
@@ -186,6 +190,66 @@ zest.init = function(config, complete) {
         
         //clean up after build, by restarting entire init
         zest.config.rebuildZestLayer = false;
+        delete requirejs.s.contexts[zest.config.require.server.context || '_'];
+        zest.init(zest.config, complete);
+      });
+    });
+    
+    //build the app if necessary -> restarts load again (includes core build again)
+    makeServer.on(function(next) {
+      if (!zest.config.build || zest.builtLayers)
+        return next();
+        
+      console.log('Building whole project');
+      
+      zest.config.require.build.appDir = path.resolve(zest.config.appDir, zest.config.publicDir);
+      zest.config.require.build.dir = path.resolve(zest.config.appDir, zest.config.publicBuildDir);
+      zest.config.require.build.baseUrl = zest.config.baseDir;
+      
+      //add core build layer as first module
+      //delete it first if there is one
+      var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js');
+      if (fs.existsSync(buildLayerPath))
+        fs.unlinkSync(buildLayerPath);
+      zest.config.require.build.modules.unshift({
+        name: 'zest/build-layer',
+        create: true,
+        include: ['$zest-server/attachment', 'zest/zest'].concat(zest.config.zestLayerInclude),
+        override: {
+          wrap: {
+            start: 'for (var c in require.s.contexts) { require.s.contexts[c].nextTick = function(fn){ fn(); } }',
+            end: "require(['$zest-server/attachment']);"
+          }
+        }
+      });
+      
+      var _onResourceLoad = requirejs.onResourceLoad;
+      requirejs.optimize(zest.config.require.build, function(buildResponse) {
+        console.log(buildResponse);
+        requirejs.onResourceLoad = _onResourceLoad;
+        
+        //parse the build response to save the build tree for use in layer embedding
+        buildResponse = buildResponse.substr(1, buildResponse.length - 2);
+        
+        zest.builtLayers = {};
+        
+        var defineRegEx = /define\(("([^"\\]*(\\.[^"\\]*)*)"|\'([^\'\\]*(\\.[^\'\\]*)*)\'),/g;
+        
+        var buildLayers = buildResponse.split('\n\n');
+        for (var i = 0; i < buildLayers.length; i++) {
+          var moduleName = buildLayers[i].substr(0, buildLayers[i].indexOf('\n----------------\n'));
+          if (moduleName.substr(moduleName.length - 3, 3) == '.js') {
+            //load the module file as text
+            var matches = (fs.readFileSync(path.resolve(zest.config.appDir, zest.config.publicBuildDir, moduleName)) + '').match(defineRegEx);
+            for (var j = 0; j < matches.length; j++)
+              matches[j] = matches[j].substr(8, matches[j].length - 10);
+            zest.builtLayers['/' + moduleName.substr(0, moduleName.length - 3)] = matches;
+          }
+        }
+        
+        //clean up after build, by restarting entire init
+        zest.config.rebuildZestLayer = false;
+        zest.config.build = false;
         delete requirejs.s.contexts[zest.config.require.server.context || '_'];
         zest.init(zest.config, complete);
       });
@@ -523,7 +587,7 @@ var loadConfig = function(config) {
         a[p] = a[p] || {};
         deepPrepend(a[p], b[p]);
       }
-      else if (a[p] == undefined)
+      else if (a[p] === undefined)
         a[p] = b[p];
     }
   }
@@ -562,7 +626,7 @@ var loadConfig = function(config) {
 var fileServer = null;
 var serveFiles = function(req, res, next) {
   if (zest.config.serveFiles) {
-    fileServer = fileServer || new nodeStatic.Server(path.resolve(zest.config.appDir, zest.config.publicDir), {
+    fileServer = fileServer || new nodeStatic.Server(path.resolve(zest.config.appDir, (zest.config.build || zest.builtLayers) ? zest.config.publicBuildDir : zest.config.publicDir), {
       cache: zest.config.fileExpires
     });
     setTimeout(function() {
@@ -642,6 +706,7 @@ zest.renderPage = function(page, res, complete) {
   //add the defaults to the page
   $z.extend(page, zest.config.page, {
     '*': 'DFILL',
+    'scripts': 'ARR_PREPEND',
     'layers': 'ARR_PREPEND'
   })
 
@@ -649,8 +714,21 @@ zest.renderPage = function(page, res, complete) {
   if (!page.requireConfig)
     page.requireConfig = zest.config.require.client;
   
-  //add zest layer
-  page.layers.unshift(zest.config.zestLayer + '.js');
+  //add zest script
+  page.scripts.unshift('zest/build-layer.js');
+  
+  //process page layers to include the paths config
+  if (zest.builtLayers)
+    for (var i = 0; i < page.layers.length; i++) {
+      var layerName = page.layers[i];
+      var layer = zest.builtLayers[layerName];
+      if (!layer) {
+        console.log('Build layer ' + layerName + ' not found for page inclusion.');
+        continue;
+      }
+      for (var j = 0; j < layer.length; j++)
+        page.requireConfig.paths[layer[j]] = layerName;
+    }
   
   delete zest._nextComponentId;
   page.global._nextComponentId = 1;

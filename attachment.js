@@ -77,7 +77,7 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
       
       var filePath = lessId ? cssIds[i].substr(5) : cssIds[i].substr(4);
       
-      var layerUrl = require.toUrl((!lessId ? 'require-css/css!' : 'require-less/less!') + filePath + (!lessId ? '.css' : ''));
+      var layerUrl = require.toUrl((!lessId ? 'require-css/css!' : 'require-less/less!') + filePath);
       
       var lt = '<';
       var gt = '>';

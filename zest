@@ -9,7 +9,6 @@
  * zest create [dir]
  *
  */
-
 var fs = require('fs'),
   path = require('path'),
   spawn = require('child_process').spawn;
@@ -29,7 +28,7 @@ switch (args[0]) {
     zestStart(args[1], true);
     break;
   case 'create':
-    zestCreate(args[1]);
+    zestCreate(args[1], args);
     break;
   case 'volo-add':
     zestVoloAdd(args.splice(1, args.length - 1));
@@ -43,12 +42,19 @@ function zestVoloAdd(args) {
   pipeStd(spawn(getBinPath('volo'), ['add'].concat(args), { cwd: process.cwd() }));
 }
 
-function zestCreate(createPath) {
+function zestCreate(createPath, args) {
   var createDir = path.resolve(createPath, '../');
   var createName = path.basename(path.resolve(createPath));
  
   //calls 'volo create [createName] zestjs/zest-template'
-  pipeStd(spawn(getBinPath('volo'), ['create', createName, 'zestjs/zest-template'], { cwd: createDir }));
+  var repo = 'zest'
+  if (args[2])
+    repo = args[2];
+  //if not a full name, default to the zestjs/[name]-template rule
+  if (repo.indexOf('/') == -1)
+    repo = 'zestjs/' + repo + '-template';
+  
+  pipeStd(spawn(getBinPath('volo'), ['create', createName, repo], { cwd: createDir }));
 }
 
 function zestStart(configPath, nodemon) {
@@ -65,8 +71,7 @@ function zestStart(configPath, nodemon) {
     return pipeStd(spawn(getBinPath('nodemon'), [module.filename, 'start', configPath], { cwd: configDir }));
   }
   
-  var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest');
-
+  var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest') + (windows ? '.cmd' : '');
   if (fs.existsSync(localBinPath) && __dirname != path.dirname(fs.realpathSync(localBinPath))) {
     //run the local version of zest through the local bin
     console.log('Running zest server as a local module');
@@ -78,8 +83,6 @@ function zestStart(configPath, nodemon) {
     zest.createServer(configPath);
   }
 }
-
-
 
 /* helper functions */
 function pipeStd(p) {

@@ -3,7 +3,7 @@ define
   options:
     id: null
     title: ''
-    layers: []
+    scripts: []
     main: ''
     structure: ''
     options: {}
@@ -22,7 +22,8 @@ define
       {`title`}
       <script type='text/javascript'>var require = #{JSON.stringify(o.requireConfig)};</script>
       <script type='text/javascript' src='#{o.requireConfig.baseUrl}/require.js' data-main='#{if o.main then o.main else ''}'></script>
-      #{ "<script type='text/javascript' src='#{o.requireConfig.baseUrl}/" + layer + "'></script>" for layer in o.layers }
+      
+      #{ "<script type='text/javascript' src='#{o.requireConfig.baseUrl}/" + script + "'></script>" for script in o.scripts }
     </head>
     <body>{`body`}</body>
     </html>
