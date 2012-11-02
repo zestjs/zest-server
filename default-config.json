@@ -27,7 +27,7 @@
   
   /* Core Layer Building */
   zestLayerInclude: ['selector'],
-  rebuildZestLayer: true,
+  rebuildZestLayer: false,
   
   /* Attachment */
   explicitAttachment: false, //show attachment object in html

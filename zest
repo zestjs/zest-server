@@ -30,7 +30,7 @@ switch (args[0]) {
   case 'create':
     zestCreate(args[1], args);
     break;
-  case 'volo-add':
+  case 'add':
     zestVoloAdd(args.splice(1, args.length - 1));
     break;
   default:
@@ -47,12 +47,12 @@ function zestCreate(createPath, args) {
   var createName = path.basename(path.resolve(createPath));
  
   //calls 'volo create [createName] zestjs/zest-template'
-  var repo = 'zest'
+  var repo = 'basic'
   if (args[2])
     repo = args[2];
   //if not a full name, default to the zestjs/[name]-template rule
   if (repo.indexOf('/') == -1)
-    repo = 'zestjs/' + repo + '-template';
+    repo = 'zestjs/template-' + repo;
   
   pipeStd(spawn(getBinPath('volo'), ['create', createName, repo], { cwd: createDir }));
 }
