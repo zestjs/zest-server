@@ -86,6 +86,9 @@ function zestStart(configPath, nodemon) {
 
 /* helper functions */
 function pipeStd(p) {
+  process.on('exit', function() {
+    p.kill();
+  });
   p.stdout.on('data', function(data) {
     process.stdout.write(data);
   });
