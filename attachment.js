@@ -43,9 +43,6 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
   pathname.pop();
   pathname = pathname.join('/') + '/';
   
-  //make file url absolute
-  var _baseUrl = '/' + normalize.convertURIBase(require.toUrl('.'), pathname, '/');
-  
   $z.style = function(id, cssIds, instanceCSS, attach) {
     var scriptNode = Array.prototype.pop.call(document.getElementsByTagName('script'));
     
@@ -92,8 +89,7 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
         document.write(lt + 'script type="text/javascript" src="' + layerUrl + '"' + gt + lt + '/script' + gt);
       
       //otherwise, sync download and inject the css right now, then define it
-      else {          
-        var pathname;
+      else {
         
         if (lessId) {
           //first ensure we have the less parser
@@ -112,11 +108,14 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
               return css;
             }
           }
-          css.inject(normalize(less.parse(ajaxSync(require.toUrl(filePath + (filePath.substr(cssIds[i].length - 5, 5) != '.less' ? '.less' : '')))), _baseUrl, pathname));
+          var sourceUrl = require.toUrl(filePath + (filePath.substr(cssIds[i].length - 5, 5) != '.less' ? '.less' : ''));
+          css.inject(normalize(less.parse(ajaxSync(sourceUrl)), sourceUrl, pathname));
         }
         
-        else
-          css.inject(normalize(ajaxSync(require.toUrl(filePath + (filePath.substr(cssIds[i].length - 4, 4) != '.css' ? '.css' : ''))), _baseUrl, pathname));
+        else {
+          var sourceUrl = require.toUrl(filePath + (filePath.substr(cssIds[i].length - 4, 4) != '.css' ? '.css' : ''));
+          css.inject(normalize(ajaxSync(sourceUrl), sourceUrl, pathname));
+        }
           
         //define the css in requires
         define((!lessId ? 'require-css/css!' : 'require-less/less!') + filePath, function() {
