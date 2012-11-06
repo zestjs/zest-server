@@ -89,7 +89,6 @@ zest.init = function(config, complete) {
     //check each dependency for css! calls or dependencies which have css! dependencies themselves
     for (var i = 0; i < depArray.length; i++) {
       var depId = depArray[i].prefix == 'cs' ? depArray[i].name : depArray[i].id;
-      
       //dependency that might have sub-css dependencies
       if (cssDependencies[depId]) {
         cssDependencies[moduleId] = cssDependencies[moduleId] || [];
@@ -793,6 +792,22 @@ zest.render.renderArray = function(structure, options, write, complete) {
   )(i);
 }
 
+var getCSSDependencies = function(component) {
+  var cssIds = [];
+  var moduleId;
+  
+  if ((moduleId = $z.getModuleId(component)))
+    //have a moduleId, see if we are dependent on any css
+    cssIds = cssIds.concat(cssDependencies[moduleId.substr(0, 3) == 'cs!' ? moduleId.substr(3) : moduleId] || []);
+    
+  //also add in the css for any inheritors
+  if (component._definition && component._definition._implement)
+    for (var i = 0; i < component._definition._implement.length; i++)
+      cssIds = cssIds.concat(getCSSDependencies(component._definition._implement[i]));
+  
+  return cssIds
+}
+
 zest.render.renderComponentTemplate = function(component, options, write, complete, noDelay) {
   if (zest.config.renderDelay && !noDelay) {
     var self = this;
@@ -801,14 +816,7 @@ zest.render.renderComponentTemplate = function(component, options, write, comple
     }, zest.config.renderDelay);
   }
   
-  var cssIds;
-  var moduleId;
-  
-  if ((moduleId = $z.getModuleId(component)))
-    //have a moduleId, see if we are dependent on any css
-    cssIds = cssDependencies[moduleId.substr(0, 3) == 'cs!' ? moduleId.substr(3) : moduleId];
-    
-  cssIds = cssIds || [];
+  var cssIds = getCSSDependencies(component);
   
   var pageCSSIds = options.global.pageCSSIds = options.global.pageCSSIds || [];
   //filter the cssIds to unique
@@ -825,6 +833,7 @@ zest.render.renderComponentTemplate = function(component, options, write, comple
   
   // render the style attachment if necessary
   if (options.id || css || (cssIds && cssIds.length)) {
+    var moduleId = $z.getModuleId(component);
     //normalize css paths to the baseurl
     if (moduleId)
       css = normalize(css, requirejs.toUrl(moduleId), zest.baseUrl);
@@ -918,6 +927,7 @@ zest.render.renderAttach = function(component, options, write, complete) {
   }
   
   var moduleId = $z.getModuleId(component);
+  console.log(moduleId);
   
   if (typeof component.attach === 'string') {
     //separate attahment module

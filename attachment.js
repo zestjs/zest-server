@@ -101,7 +101,7 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
               var css;
               parser.parse(less, function(err, tree) {
                 if (err)
-                  throw err;
+                  throw new Error(err.message, lessId, err.line);
                 css = tree.toCSS();
               });
               //instant callback luckily
