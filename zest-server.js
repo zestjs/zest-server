@@ -927,7 +927,6 @@ zest.render.renderAttach = function(component, options, write, complete) {
   }
   
   var moduleId = $z.getModuleId(component);
-  console.log(moduleId);
   
   if (typeof component.attach === 'string') {
     //separate attahment module
