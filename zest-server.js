@@ -349,6 +349,9 @@ zest.init = function(config, complete) {
       
       //final fall through is the zest 404, this should never be reached really
       zest.server.on(function(req, res) {
+        //for some reason, a session interferes with 404 headers
+        if (req.session)
+          delete req.session;
         res.writeHead(404, {
           'Content-Type': 'text/html'
         });
