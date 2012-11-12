@@ -260,7 +260,7 @@ define(['require', 'zest', 'http'], function(require, $z, http) {
     }
     
     //run through inheritance, replacing attachments in requires
-    if (def.implement) {
+    if (def._implement) {
       var inheritors = [
         [$z, '$z'],
         [$z.Component._definition, '$z.Component'],
@@ -282,9 +282,9 @@ define(['require', 'zest', 'http'], function(require, $z, http) {
       
       closures = closures.concat(inheritors);
       
-      outer: for (var i = 0; i < def.implement.length; i++) {
+      outer: for (var i = 0; i < def._implement.length; i++) {
         
-        var imp = def.implement[i];
+        var imp = def._implement[i];
         
         //ignore inheritors
         for (var j = 0; j < inheritors.length; j++)

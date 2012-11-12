@@ -326,6 +326,9 @@ zest.init = function(config, complete) {
       
       //finally, follow the routing
       zest.server.on(function(req, res, next) {
+        if (res.sent)
+          return;
+        
         if (req.redirect) {
           res.writeHead(301, {
             'Location': req.redirect
@@ -874,7 +877,8 @@ zest.render.renderComponentTemplate = function(component, options, write, comple
           var regionStructure = component[regionName] || options[regionName];
                     
           if (typeof regionStructure == 'function' && !regionStructure.template) {
-            regionStructure = regionStructure.call(component, regionOptions);
+            //copy the options for the region rendering
+            regionStructure = regionStructure.call(component, $z.extend({}, options, { id: 'IGNORE', type: 'IGNORE' }));
           }
           
           renderArray.splice(j + 1, 0, regionStructure);
@@ -927,6 +931,10 @@ zest.render.renderAttach = function(component, options, write, complete) {
   }
   
   var moduleId = $z.getModuleId(component);
+  
+  //NB for CSS policies, we can adjust the script tag to load a dynamic script from the server.
+  //the only issue is that this script involves a separate request for each component instance unless using SPDY.
+  //the hope is that SPDY and CSS can go together then :). Perhaps some kind of fallback method?
   
   if (typeof component.attach === 'string') {
     //separate attahment module
