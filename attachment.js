@@ -196,7 +196,7 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
   
   $z.attach.doAttach = function(id) {
     var item = $z._components[id];
-    item.controller = item.component.attach.call(item.component, item.$$, item.options);
+    item.controller = item.controller.attach.call(item.controller, item.$$, item.options);
     if ($z._nextComponentId == id.substr(1))
       $z._nextComponentId++;
     delete item.options;
