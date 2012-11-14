@@ -133,7 +133,7 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
     
     //store attachment info for removal on attachment
     if (attach)
-      _attachments[id] = {
+      $z._components[id] = {
         styleNode: scriptNode
       };
     else
@@ -149,7 +149,6 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
    * 
    * 
    */
-  var _attachments = {};
   $z.attach = function(id, deps, def, options) {
     //basic attachment variation
     if (typeof deps === 'string') {
@@ -163,7 +162,8 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
     var scriptNode = Array.prototype.pop.call(document.getElementsByTagName('script'));
     var prevNode = scriptNode;
     
-    var styleNode = _attachments[id].styleNode;
+    var styleNode = $z._components[id].styleNode;
+    delete $z._components[id].styleNode;
     
     var $$ = [];
     while (prevNode = prevNode.previousSibling) {
@@ -181,13 +181,13 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
         $z._global[o] = options.global[o];
     options.global = $z._global;
     
-    delete _attachments[id].firstElement;
-    _attachments[id].$$ = $$;
-    _attachments[id].options = options;
+    delete $z._components[id].firstElement;
+    $z._components[id].$$ = $$;
+    $z._components[id].options = options;
     
     requirejs(deps, function() {
       var com = def.apply(null, arguments);
-      _attachments[id].component = com;
+      $z._components[id].controller = com;
       $z.attach.doAttach(id);
     });
   }
@@ -195,12 +195,11 @@ define(['css', 'less', 'zest', 'require-css/normalize'], function (css, less, $z
   $z._components = $z._components || {};
   
   $z.attach.doAttach = function(id) {
-    var item = _attachments[id];
-    item.$$[0].$zid = id;
-    $z._components[id] = item.component.attach.call(item.component, item.$$, item.options);
+    var item = $z._components[id];
+    item.controller = item.component.attach.call(item.component, item.$$, item.options);
     if ($z._nextComponentId == id.substr(1))
       $z._nextComponentId++;
-    delete _attachments[id];
+    delete item.options;
   }
   
   return $z;

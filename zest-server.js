@@ -111,7 +111,7 @@ zest.init = function(config, complete) {
   
   //requirejs
   console.log('Loading RequireJS dependencies');
-  zest.require(['require', 'zest', 'css', '$zest-server/attach', 'require-css/normalize'], function(req, _$z, _css, _attach, _normalize) {
+  zest.require(['require', 'zest', 'css', 'zest/attach', 'require-css/normalize'], function(req, _$z, _css, _attach, _normalize) {
     zest.req = req;
     zest.baseUrl = zest.require.toUrl('.');
     $z = _$z;
