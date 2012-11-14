@@ -955,6 +955,7 @@ zest.render.renderAttach = function(component, options, write, complete) {
     if (moduleId) {
       // hidden attachment - better (i think)
       if (!zest.config.explicitAttachment) {
+        write("<script src='/" + zest.config.baseDir + "/require-inline.js' data-require='" + moduleId + "'></script> \n");
         write("<script>" +
           "$z.attach('" + _options.id + "', '" + (zest.config.dynamicAttachment ? "zest/attach!" : "") + moduleId + "', " + JSON.stringify(options) + ");" +
         "</script>\n");
