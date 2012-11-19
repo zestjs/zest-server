@@ -16,18 +16,9 @@
       debugInfo: true,
       logRender: true,
       renderDelay: 0,
-      staticLatency: 0,
-      
-      /* Application Server */
-      modules: {
-        //'cs!$zest-server/core-module': {}
-      }
+      staticLatency: 0
     }
   },
-  
-  /* Core Layer Building */
-  zestLayerInclude: ['selector'],
-  rebuildZestLayer: false,
   
   /* Attachment */
   explicitAttachment: false, //show attachment object in html
@@ -58,24 +49,23 @@
   /* Page Rendering - default options */
   page: {
     //structure to render the html page with (html template effectively)
-    pageStructure: 'cs!$zest-server/html',
+    pageRender: 'cs!$zest-server/html',
     
     //page options, structure and options are body structure, as set by route
     id: null,
     title: '',
-    scripts: [], //by default starts with zestLayer. BLOCKING scripts
+    scripts: [], //blocking scripts
     layers: [], //layers to include in the current page. Used for builds to load a layer instead of the file.
-    main: '',
+    requireMain: '',
     //requireConfig: zest.config.client,
     options: {},
-    global: {} //default global options
+    global: {}, //default global options
+    
+    typeAttribute: 'component' //attribute to use for the component type
   },
   
   /* Application Server */
-  loadCoreModule: true,
-  modules: {
-    //'cs!$zest-server/core-module': {}
-  },
+  modules: [],
   
   /* Require Config */
   //appDir: process.cwd(),
@@ -86,7 +76,6 @@
   require: {
     config: {
       'require-is/is': {
-        render: true
       }
     },
     paths: {
@@ -116,9 +105,6 @@
       },
       config: {
         'require-is/is': {
-          client: false,
-          render: true,
-          node: true
         }
       }
     },

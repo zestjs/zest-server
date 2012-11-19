@@ -2,7 +2,10 @@
   "name": "zest-server",
   "description": "Server-side component rendering",
   "version": "0.0.3",
-  "author": "Guy Bedford <guybedford@gmail.com>",
+  "author": {
+    "name": "Guy Bedford",
+    "email": "guybedford@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/zestjs/zest-server"
@@ -15,5 +18,11 @@
   },
   "bin": {
     "zest": "./zest"
-  }
+  },
+  "_id": "zest-server@0.0.3",
+  "readme": "ERROR: No README.md file found!",
+  "dist": {
+    "shasum": "bcfb58e697cc66796d27e7f969ecf5eef611ef73"
+  },
+  "_from": "zest-server@0.0.3"
 }

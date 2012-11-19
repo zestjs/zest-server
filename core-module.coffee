@@ -1,16 +1,14 @@
-define ['zest', 'require'], ($z, require) ->
-  (config) ->
-    routes:
-      # @ = canonical alias
-      '/component/{moduleId*}': (o, render) ->
-        require [o.moduleId], (com) ->
-          render
-            component: com
-            options: o._queryParams || {}
-        , (err) ->
-          render [err.toString()]
-    
-    handler: (req, res, next) ->
-      # req.htmlOptions.main = 'test'
-      # req.htmlOptions.layers = []
-      next();
+define ['require'], (require) ->
+  routes:    
+    '/component/{moduleId*}':
+      structure:
+        load: (o, render) ->
+          require [o.moduleId], (com) ->
+            o.com = com
+            render()
+          , (err) ->
+            o.com = err.toString()
+            render()
+        render: (o) ->
+          render: o.com
+          options: o._query || {}

@@ -66,8 +66,8 @@ var reqErr = function(err) {
   throw err;
 }
 
-//get hooked in once config has been loaded
-var $z, css, attach, normalize;
+//gets hooked in once config has been loaded
+var zoe, router;
 
 //trace css dependencies for modules to allow critical css inclusions
 var cssDependencies = {};
@@ -111,86 +111,30 @@ zest.init = function(config, complete) {
   
   //requirejs
   console.log('Loading RequireJS dependencies');
-  zest.require(['require', 'zest', 'css', 'zest/attach', 'require-css/normalize'], function(req, _$z, _css, _attach, _normalize) {
-    zest.req = req;
+  zest.require(['zoe', 'zest/router'], function(_zoe, _router) {
     zest.baseUrl = zest.require.toUrl('.');
-    $z = _$z;
-    css = _css;
-    attach = _attach;
-    normalize = _normalize;
-    
-    $z.extend($z.render, zest.render, 'REPLACE');
+    zoe = _zoe;
+    router = _router;
     
     //the step function for creating the server. executed immediately after creating.
-    var makeServer = $z.fn($z.fn.ASYNC);
+    var makeServer = zoe.fn(zoe.fn.ASYNC);
   
     //create server handler
     makeServer.on(function(next) {
-      zest.server = $z.fn($z.fn.ASYNC);
-      zest.handlers = $z.fn($z.fn.ASYNC);
+      zest.server = zoe.fn(zoe.fn.ASYNC);
+      zest.handlers = zoe.fn(zoe.fn.ASYNC);
       zest.routes = {};
       
       next();
     });
     
-    //load core module if necessary
+    //load modules
     zest.modules = [];
     makeServer.on(function(next) {
-      if (zest.config.loadCoreModule)
-        loadModule('cs!$zest-server/core-module', true, next);
-      else
-        return next();
-    });
-    
-    //load modules
-    makeServer.on(function(next) {
-      if (zest.config.modules)
-        loadModules(zest.config.modules, next)
-      else
-        next();
-    });
-    
-    //build the core if necessary -> restarts load again (used for build in dev)
-    makeServer.on(function(next) {
-      if (zest.config.build || zest.builtLayers || (!zest.config.rebuildZestLayer && fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js'))))
-        return next();
+      if (zest.config.modules.length == 0)
+        zest.config.modules.push('cs!$zest-server/core-module');
       
-      console.log('Building core files');
-      var build = {
-        name: '$zest-server/attachment',
-        include: ['zest/zest'].concat(zest.config.zestLayerInclude),
-        baseUrl: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir),
-        out: path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js'),
-        paths: {
-          '$zest-server': __dirname
-        },
-        //optimize: 'none', //quicker
-        //ensure synchronous requires
-        wrap: {
-          start: 'for (var c in require.s.contexts) { require.s.contexts[c].nextTick = function(fn){ fn(); } }',
-          end: "require(['$zest-server/attachment']);"
-        }
-      };
-      
-      $z.extend(build, zest.config.require.build, {
-        '*': 'FILL',
-        'appDir': 'IGNORE',
-        'dir': 'IGNORE',
-        'baseUrl': 'IGNORE',
-        'modules': 'IGNORE',
-        'paths': 'FILL'
-      });
-      
-      var _onResourceLoad = requirejs.onResourceLoad;
-      requirejs.optimize(build, function(buildResponse) {
-        console.log(buildResponse);
-        requirejs.onResourceLoad = _onResourceLoad;
-        
-        //clean up after build, by restarting entire init
-        zest.config.rebuildZestLayer = false;
-        delete requirejs.s.contexts[zest.config.require.server.context || '_'];
-        zest.init(zest.config, complete);
-      });
+      loadModules(zest.config.modules, next);
     });
     
     //build the app if necessary -> restarts load again (includes core build again)
@@ -212,13 +156,7 @@ zest.init = function(config, complete) {
       zest.config.require.build.modules.unshift({
         name: 'zest/build-layer',
         create: true,
-        include: ['$zest-server/attachment', 'zest/zest'].concat(zest.config.zestLayerInclude),
-        override: {
-          wrap: {
-            start: 'for (var c in require.s.contexts) { require.s.contexts[c].nextTick = function(fn){ fn(); } }',
-            end: "require(['$zest-server/attachment']);"
-          }
-        }
+        include: ['require', 'require-inline', 'zest/zest'].concat(zest.config.zestLayerInclude),
       });
       
       var _onResourceLoad = requirejs.onResourceLoad;
@@ -274,7 +212,7 @@ zest.init = function(config, complete) {
          * route.options (the route component options)
          * 
          */
-        var r = $z.router.route(req.url);
+        var r = router.route(req.url);
         //null route -> skip
         if (r.route === null)
           return next();
@@ -289,26 +227,26 @@ zest.init = function(config, complete) {
         req.page = {};
         
         //route object
-        if (typeof r.route == 'object') {
+        if (typeof r.route == 'object')
           //clone the route defaults onto the page
-          $z.extend(req.page, r.route, {
+          zoe.extend(req.page, r.route, {
             '*': 'DFILL',
             'layers': 'ARR_PREPEND'
           });
-        }
-        else {
+        else
           req.page.structure = r.route;
-          req.page.options = $z.extend({}, r.options, 'FILL');
-        }
+          
+        req.page.options = req.page.options || {};
+        zoe.extend(req.page.options, r.options, 'FILL');
         
         //then fill in the page defaults from the config
-        $z.extend(req.page, zest.config.page, {
+        zoe.extend(req.page, zest.config.page, {
           '*': 'DFILL',
           'layers': 'ARR_PREPEND'
         });
 
         //deep clone the require config, allowing page-specific variation
-        req.page.requireConfig = $z.extend(req.page.requireConfig || {}, zest.config.require.client, 'DREPLACE');
+        req.page.requireConfig = zoe.extend(req.page.requireConfig || {}, zest.config.require.client, 'DREPLACE');
         
         //lookup the module name responsible for the page route
         for (var i = 0; i < zest.modules.length; i++) {
@@ -404,21 +342,9 @@ zest.init = function(config, complete) {
  *
  */
 
-//deep compare two configuration objects to see if they match
-//assumed as config json only, so no classes or functions on the objects
-var deepCompareConfig = function(a, b) {
-  for (var p in a) {
-    if (typeof a[p] == 'object' && !deepCompare(a[p], b[0]))
-      return false;
-    else if (a[p] !== b[p])
-      return false;
-  }
-  return true;
-}
-
-var loadModule = function(moduleId, config, complete) {
+var loadModule = function(moduleId, complete) {
   //loads a zest server module
-  var doLoad = $z.fn('ASYNC');
+  var doLoad = zoe.fn('ASYNC');
   
   //load module
   var module;
@@ -430,21 +356,6 @@ var loadModule = function(moduleId, config, complete) {
     });
   });
   
-  //load config
-  doLoad.on(function(next) {
-    if (typeof config == 'string')
-      zest.require([config], function(_config) {
-        config = _config;
-        next();
-      });
-    else if (typeof config == 'boolean') {
-      config = {};
-      next();
-    }
-    else
-      next();
-  });
-  
   //instantiate module
   var instance;
   doLoad.on(function(next) {
@@ -452,22 +363,26 @@ var loadModule = function(moduleId, config, complete) {
     for (var i = 0; i < zest.modules.length; i++) {
       if (zest.modules[i].moduleId != moduleId)
         continue;
-      //deep check the config matches
-      if (deepCompareConfig(zest.modules[i].config, config)) {
-        //same config - ignore module inclusion
-        return next();
-      }
+      //same module - ignore inclusion
+      return next();
     }
     
     //instantiate
     if (typeof module == 'function')
-      instance = module(config);
+      instance = module(zest.config);
     else
       instance = module;
     
     //add routes and handlers
     if (instance.routes)
-      $z.router.addRoutes(instance.routes);
+      router.addRoutes(instance.routes);
+    if (instance.routeHandler)
+      zest.handlers.on(function(req, res, next) {
+        if (req.page && req.page.module == instance)
+          instance.routeHandler.apply(instance, arguments);
+        else
+          next();
+      });
     if (instance.handler)
       zest.handlers.on(function() {
         instance.handler.apply(instance, arguments);
@@ -476,7 +391,6 @@ var loadModule = function(moduleId, config, complete) {
     //store module instance info
     zest.modules.push({
       moduleId: moduleId,
-      config: config,
       instance: instance
     });
     
@@ -496,26 +410,26 @@ var loadModule = function(moduleId, config, complete) {
     if (moduleConfig.environments) {
       outModuleConfig = moduleConfig.environments[zest.config.environment] || {};
       delete moduleConfig.environments;
-      $z.extend(outModuleConfig, moduleConfig, 'DPREPEND');
+      zoe.extend(outModuleConfig, moduleConfig, 'DPREPEND');
     }
     
     //save environment config back for reference
     instance.zestConfig = outModuleConfig;
     
     //add module config to main zest config
-    $z.extend(zest.config, outModuleConfig, {'*': 'DAPPEND', 'require': 'IGNORE'});
+    zoe.extend(zest.config, outModuleConfig, {'*': 'DAPPEND', 'require': 'IGNORE'});
     
     //compute require config with defaults, then add into main zest config
     if (outModuleConfig.require) {
       var _extendRules = {'*': 'DPREPEND', 'client': 'IGNORE', 'server': 'IGNORE', 'build': 'IGNORE'};
       
-      $z.extend(zest.config.require.client, outModuleConfig.require, _extendRules);
-      $z.extend(zest.config.require.server, outModuleConfig.require, _extendRules);
-      $z.extend(zest.config.require.build, outModuleConfig.require, _extendRules);
+      zoe.extend(zest.config.require.client, outModuleConfig.require, _extendRules);
+      zoe.extend(zest.config.require.server, outModuleConfig.require, _extendRules);
+      zoe.extend(zest.config.require.build, outModuleConfig.require, _extendRules);
       
-      $z.extend(zest.config.require.client, outModuleConfig.require.client || {}, 'DPREPEND');
-      $z.extend(zest.config.require.server, outModuleConfig.require.server || {}, 'DPREPEND');
-      $z.extend(zest.config.require.build, outModuleConfig.require.build || {}, 'DPREPEND');
+      zoe.extend(zest.config.require.client, outModuleConfig.require.client || {}, 'DPREPEND');
+      zoe.extend(zest.config.require.server, outModuleConfig.require.server || {}, 'DPREPEND');
+      zoe.extend(zest.config.require.build, outModuleConfig.require.build || {}, 'DPREPEND');
       
       //update server require
       zest.require = requirejs.config(zest.config.require.server);
@@ -532,17 +446,14 @@ var loadModule = function(moduleId, config, complete) {
 }
 
 var loadModules = function(modules, complete) {
-  var loadCnt = 0;
-  for (var curModule in modules)
-    loadCnt++;
+  var loadCnt = modules.length;
   
-  for (var curModule in modules) {
-    loadModule(curModule, modules[curModule], function() {
+  for (var i = 0; i < modules.length; i++)
+    loadModule(modules[i], function() {
       loadCnt--;
       if (loadCnt == 0)
         complete();
     });
-  }
 }
 
 zest.startServer = function(port) {
@@ -660,66 +571,62 @@ zest.build = function(complete) {
 
 
 /*
- * $z.render
+ * zest.render
  *
- * $z.render(structure, [pageOptions], options, write, complete)
+ * zest.render(structure, options, response, complete)
  *
  * streams the response.
  *
- * If no page options are provided, the default page template is used.
- *
- * Render includes attachment script prefix and suffixes.
- *
- * This assumes that the template populates the 'head' region to allow for these scripts to be embedded.
- *
- * htmlOptions = {
- *   component: 'pageTemplateId',
- *   title: '',
- *   body: ''
- * }
- *
- * Can add any others for a custom template
- *
  * NB need to add a tabDepth
- *
  *
  */
 zest.render = function(structure, options, res, complete) {
   options = options || {};
   options.global._nextComponentId = 1;
-  delete $z._nextComponentId;
+  options.global._ids = options.global._ids || [];
 
   res.writeHead(200, {
     'Content-Type': 'text/html'
   });
   
-  $z.render.renderItem({
-    structure: structure,
-    options: options
-  }, function(chunk) {
-    res.write(chunk);
-  }, function() {
+  var _complete = function() {
     res.end();
     if (complete)
       complete();
-  });
+  }
+  var _write = function(chunk) {
+    res.write(chunk);
+  }
+  
+  if (typeof structure == 'string')
+    zest.require([structure], function(structure) {
+      zest.render.renderItem(structure, options, _write, _complete);
+    });
+  else
+    zest.render.renderItem(structure, options, _write, _complete);
 }
-
+/*
+ * zest.renderPage
+ *
+ * 
+ *
+ */
 zest.renderPage = function(page, res, complete) {
-
   //add the defaults to the page
-  $z.extend(page, zest.config.page, {
+  zoe.extend(page, zest.config.page, {
     '*': 'DFILL',
     'scripts': 'ARR_PREPEND',
     'layers': 'ARR_PREPEND'
   })
 
-  //wont be altering at this level, so no need to clone require config
-  if (!page.requireConfig)
-    page.requireConfig = zest.config.require.client;
+  if (page.typeAttribute != 'component') {
+    page.requireConfig.config = page.requireConfig.config || {};
+    page.requireConfig.config['zest/render'] = page.requireConfig.config['zest/render'] || {};
+    page.requireConfig.config['zest/render'].typeAttribute = page.typeAttribute;
+  }
   
-  //add zest script
-  page.scripts.unshift('zest/build-layer.js');
+  page.requireUrl = page.requireUrl || '/' + zest.config.baseDir + '/require.js';
+  page.requireMain = page.requireMain || '';
   
   //process page layers to include the paths config
   if (zest.builtLayers)
@@ -734,23 +641,14 @@ zest.renderPage = function(page, res, complete) {
         page.requireConfig.paths[layer[j]] = layerName;
     }
   
-  delete zest._nextComponentId;
-  page.global._nextComponentId = 1;
-    
-  res.writeHead(200, {
-    'Content-Type': 'text/html'
-  });
-  
-  $z.render.renderItem({
-    structure: page.pageStructure,
-    options: page
-  }, function(chunk) {
-    res.write(chunk);
-  }, function() {
-    res.end();
-    if (complete)
-      complete();
-  });
+  if (typeof page.structure == 'string')
+    zest.require([page.structure], function(structure) {
+      page.structure = structure;
+      zest.render(page.pageRender, page, res, complete);
+    });
+  else {
+    zest.render(page.pageRender, page, res, complete);
+  }
 }
 
 zest.render.renderArray = function(structure, options, write, complete) {
@@ -768,7 +666,7 @@ zest.render.renderArray = function(structure, options, write, complete) {
   for (var i = 0; i < len; i++) (
     function initiate(i) {
       buffer[i] = '';
-      self.renderItem(structure[i], i == len - 1 ? options : $z.extend({}, options), function(chunk) {
+      self.renderItem(structure[i], { global: options.global }, function(chunk) {
         //write to live or buffer
         if (curRender == i)
           write(chunk)
@@ -798,11 +696,65 @@ zest.render.renderArray = function(structure, options, write, complete) {
   )(i);
 }
 
+// identical to client code (the only part!)
+zest.render.renderItem = function(structure, options, write, complete) {
+  if (complete === undefined) {
+    complete = write;
+    write = options;
+    options = null;
+  }
+  complete = complete || function() {}
+  
+  if (typeof structure == 'undefined' || structure == null)
+    return complete();
+  
+  options = options || {};
+  options.global = options.global || {};
+  
+  var self = this;
+  
+  // string templates
+  if (typeof structure == 'string')
+    self.renderTemplate(structure, null, options, write, complete);
+  
+  // dynamic template or structure function
+  else if (typeof structure == 'function' && !structure.render) {
+    // run structure function
+    if (structure.length == 2)
+      structure(options, function(structure) {
+        self.renderItem(structure, { global: options.global }, write, complete);
+      });
+    else {
+      structure = structure(options);
+      
+      // check if it is a template or not
+      if (typeof structure == 'string')
+        self.renderTemplate(structure, null, options, write, complete);
+      
+      // otherwise just render
+      self.renderItem(structure, { global: options.global }, write, complete);
+    }
+  }
+
+  // structure array
+  else if (structure instanceof Array)
+    self.renderArray(structure, { global: options.global }, write, complete);
+  
+  // render component
+  else if (structure.render)
+    self.renderComponent(structure, options, write, complete);
+  
+  else {
+    console.log(structure);
+    throw 'Unrecognised structure item for render.';
+  }
+}
+
 var getCSSDependencies = function(component) {
   var cssIds = [];
   var moduleId;
   
-  if ((moduleId = $z.getModuleId(component)))
+  if ((moduleId = zest.getModuleId(component)))
     //have a moduleId, see if we are dependent on any css
     cssIds = cssIds.concat(cssDependencies[moduleId.substr(0, 3) == 'cs!' ? moduleId.substr(3) : moduleId] || []);
     
@@ -814,61 +766,51 @@ var getCSSDependencies = function(component) {
   return cssIds
 }
 
-zest.render.renderComponentTemplate = function(component, options, write, complete, noDelay) {
+var requireInlineUrl = function() {
+  return '/' + zest.config.baseDir + '/require-inline.js';
+}
+
+var attachUrl = function() {
+  return '/' + zest.config.baseDir + '/zest/attach.js';
+}
+
+zest.render.renderTemplate = function(template, component, options, write, complete, noDelay) {
   if (zest.config.renderDelay && !noDelay) {
     var self = this;
     return setTimeout(function() {
-      self.renderComponentTemplate(component, options, write, complete, true);
+      self.renderTemplate(template, component, options, write, complete, true);
     }, zest.config.renderDelay);
   }
   
-  var cssIds = getCSSDependencies(component);
-  
-  var pageCSSIds = options.global.pageCSSIds = options.global.pageCSSIds || [];
-  //filter the cssIds to unique
-  for (var i = 0; i < cssIds.length; i++) {
-    if (pageCSSIds.indexOf(cssIds[i]) != -1)
-      cssIds.splice(i, 1);
-    else
-      pageCSSIds.push(cssIds[i]);
+  if (component) {
+    var cssIds = getCSSDependencies(component);
+    
+    var pageCSSIds = options.global.pageCSSIds = options.global.pageCSSIds || [];
+    //filter the cssIds to unique
+    for (var i = 0; i < cssIds.length; i++) {
+      if (pageCSSIds.indexOf(cssIds[i]) != -1)
+        cssIds.splice(i, 1);
+      else
+        pageCSSIds.push(cssIds[i]);
+    }
+    
+    // ensure the styles are synchronously loaded
+    if (cssIds && cssIds.length) {
+      var cssList = '';
+      for (var i = 0; i < cssIds.length; i++)
+        cssList += cssIds[i].replace('"', '\\"') + ',';
+      cssList = cssList.substr(0, cssList.length - 1);
+        
+      write("<script src='" + requireInlineUrl() + "' data-require='" + cssList + "'></script> \n");
+    }
   }
-  
-  var css;
-  if (component.css)
-    css = typeof component.css == 'function' ? component.css(options) : component.css;
-  
-  // render the style attachment if necessary
-  if (options.id || css || (cssIds && cssIds.length)) {
-    var moduleId = $z.getModuleId(component);
-    //normalize css paths to the baseurl
-    if (moduleId)
-      css = normalize(css, requirejs.toUrl(moduleId), zest.baseUrl);
-    write("\n<script>" +
-      "$z.style('" + options.id + "'"
-        + (cssIds.length ? ", " + JSON.stringify(cssIds) : '')
-        + (css ? ", '" + escape(css || '') + "'" : "")
-        + (component.attach ? ', true' : '')
-        + ");"
-      + "</script>"
-      //+ "<style>" + (css || '') + "</style>"      
-      );
-  }
-
-  // Render the template
-  var html = typeof component.template == 'function' ? component.template(options) : component.template;
-  
-  //if its a page template, don't bother with labelling
-  //if (!$z.inherits(component, $z.Page))
-  html = this.labelComponent(html, options);
     
   //break up the regions into a render array
-  var regions = html.match(/\{\`\w+\`\}/g);
-  var renderArray = [html];
-  
-  var regionOptions;
+  var regions = template.match(/\{\`\w+\`\}/g);
   
   if (regions) {
-    regionOptions = $z.extend({}, options, { id: 'IGNORE', type: 'IGNORE' });
+    // dont share type and id (already on render array)
+    var renderArray = [template];
     for (var i = 0; i < regions.length; i++)
       for (var j = 0; j < renderArray.length; j++) {
         if (typeof renderArray[j] == 'string' && renderArray[j].indexOf(regions[i]) != -1) {
@@ -877,112 +819,190 @@ zest.render.renderComponentTemplate = function(component, options, write, comple
           var regionName = regions[i].substr(2, regions[i].length - 4);
           renderArray.splice(j + 1, 0, split[1]);
           
-          var regionStructure = component[regionName] || options[regionName];
-                    
-          if (typeof regionStructure == 'function' && !regionStructure.template) {
-            //copy the options for the region rendering
-            regionStructure = regionStructure.call(component, $z.extend({}, options, { id: 'IGNORE', type: 'IGNORE' }));
-          }
-          
-          renderArray.splice(j + 1, 0, regionStructure);
+          // options won't have id because it is deleted 
+          renderArray.splice(j + 1, 0, {
+            render: (component && component[regionName]) || options[regionName],
+            options: options
+          });
         }
       }
+    //render
+    this.renderArray(renderArray, { global: options.global }, write, complete);
+  }
+  else {
+    write(template);
+    complete();
+  }
+}
+  
+
+var modules;  
+zest.getModuleId = function(module, definitionMatching) {
+  modules = modules || requirejs.s.contexts[zest.config.require.server.context].defined;
+  
+  var moduleId;
+  if (module == null)
+    return moduleId;
+  for (var curId in modules) {
+    if (modules[curId] == module)
+      moduleId = curId;
+    else if (definitionMatching !== false && modules[curId] && module._definition == modules[curId])
+      moduleId = curId;
+  }
+  return moduleId;
+}
+zest.render.renderComponent = function(component, options, write, complete) {
+  
+  // populate default options
+  if (component.options)
+    for (var option in component.options) {
+      if (options[option] === undefined)
+        options[option] = component.options[option];
+    }
+  
+  var self = this;
+  
+  var render = function() {
+    
+    options.type = options.type || component.type;
+    
+    // attach vars:
+    // piped options - calculated after labelling
+    var _options;
+    
+    var _id = options.id;
+    var _type = options.type;
+    
+    delete options.id;
+    delete options.type;
+    
+    var labelComponent = false;
+    if (component.attach || _type || _id)
+      labelComponent = true;
+    var _write = function(chunk) {
+      if (labelComponent && chunk && chunk.match(/^\s*<(?!script)\w+/)) {
+        labelComponent = false;
+        
+        var typeId = {
+          id: _id,
+          type: _type
+        };
+        
+        //clear space at the beginning of the html to avoid unnecessary text nodes
+        chunk = chunk.replace(/^\s*/, '');
+        var firstTag = chunk.match(/<\w+/);
+        
+        // read out id and type
+        var readId, readType;
+        
+        if (_id && component.attach)
+          _id = readId;
+        
+        // add id and type attributes as necessary
+        var attributes = '';
+        if (!readId && (_id || component.attach)) {
+          _id = _id || ('z' + options.global._nextComponentId++);
+          
+          if (options.global._ids.indexOf(_id) != -1)
+            throw 'Id: ' + _id + ' has already got an attachment.';
+          
+          options.global._ids.push(_id);
+          
+          attributes += ' id="' + _id + '"';
+        }
+        if (!readType && (_type != null || component.attach))
+          attributes += ' component' + (_type !== '' ? '="' + _type + '"' : '');
+        
+        chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
+        
+        // Run pipe immediately after labelling
+        options.global._piped = options.global._piped || {};
+        
+        _options = component.pipe ? component.pipe(options) || {} : {};
+        
+        //only pipe global if a global pipe has been specially specified
+        //piping the entire options global is lazy and ignored
+        if (_options.global == options.global)
+          delete _options.global;
+        else {
+          //check if we've already piped a global, and if so, don't repipe
+          for (var p in _options.global)
+            if (options.global._piped[p])
+              delete _options.global[p];
+            else
+              options.global._piped[p] = true;
+        }
+      }
+      write(chunk);
+    }
+    
+    var renderAttach = function() {
+      if (labelComponent)
+        throw 'No tags created for renderable. Need an HTML element for attachment to work!';
+      
+      if (!component.attach)
+        return complete();
+      
+      zest.render.renderAttach(component, _options, _id, write, complete);
+    }
+    
+    // check if the render is a functional
+    if (typeof component.render == 'function' && !component.render.render && component.render.length == 1) {
+      var structure = component.render(options);
+      // check if we have a template
+      if (typeof structure == 'string') {
+        self.renderTemplate(structure, component, options, _write, renderAttach);
+      }
+      else
+        self.renderItem(structure, { global: options.global }, _write, renderAttach);
+    }
+    else
+      self.renderItem(component.render, options, _write, renderAttach);
   }
   
-  //render
-  this.renderArray(renderArray, regionOptions || options, write, complete);
-  
+  if (component.load) {
+    if (component.load.length == 1) {
+      component.load(options);
+      render();
+    }
+    else
+      component.load(options, render);
+  }
+  else
+    render();
 }
 
-/*
- * $z.attach(['dep/1', 'dep/2'], function(dep1, dep2) {
- *   return com;
- * }, {..options..});
- *
- * OR
- *
- * $z.attach('def', {..options..});
- *
- */
-var escape = function(content) {
-  return content.replace(/(["'\\])/g, '\\$1')
-    .replace(/[\f]/g, "\\f")
-    .replace(/[\b]/g, "\\b")
-    .replace(/[\n]/g, "\\n")
-    .replace(/[\t]/g, "\\t")
-    .replace(/[\r]/g, "\\r");
-}
-zest.render.renderAttach = function(component, options, write, complete) {
+zest.render.renderAttach = function(component, options, id, write, complete) {
   // run attachment
-  var _options = options;
-  options.global._piped = options.global._piped || {};
+  var moduleId = zest.getModuleId(component);
   
-  // Run piping
-  options = component.pipe ? component.pipe(options) || {} : {};
+  if (!moduleId)
+    throw "Components need to be defined as individual module files. Module is: \n" + JSON.stringify(component);
   
-  //only pipe global if a global pipe has been specially specified
-  //piping the entire options global is lazy and ignored
-  if (options.global == _options.global)
-    delete options.global;
-  else {
-    //check if we've already piped a global, and if so, don't repipe
-    for (var p in options.global)
-      if (_options.global._piped[p])
-        delete options.global[p];
-      else
-        _options.global._piped[p] = true;
-  }
-  
-  var moduleId = $z.getModuleId(component);
-  
-  //NB for CSS policies, we can adjust the script tag to load a dynamic script from the server.
-  //the only issue is that this script involves a separate request for each component instance unless using SPDY.
-  //the hope is that SPDY and CSS can go together then :). Perhaps some kind of fallback method?
+  var optionsStr = options ? JSON.stringify(options) : '';
   
   if (typeof component.attach === 'string') {
-    //separate attahment module
-    var attachId = zest.req.toUrl(attach.toAbsModuleId(component.attach, moduleId));
+    var context = requirejs.s.contexts[zest.config.require.server.context];
+    // create the module map for the component
+    var parentMap = context.makeModuleMap(moduleId, null, false, false);
     
-    //nb do we need attach! here?
-    write("<script>" +
-      "$z.attach('" + _options.id + "', 'zest/attach!" + attachId + "', " + JSON.stringify(options) + ");" +
-      "</script>\n");
+    // normalize the attachment id
+    var attachId = context.makeModuleMap(component.attach, parentMap, false, true).id;
+    
+    write("<script src='" + requireInlineUrl() + "' data-require='zest," + attachId + "'></script> \n");
+    write("<script src='" + attachUrl() + "' data-zid='" + id
+          + "' data-controllerid='" + attachId + "' data-options='" + optionsStr + "'></script> \n");
       
     complete();
   }
-  //lazy attachment (mixed)
+  // separate attachment
   else {
-    if (moduleId) {
-      // hidden attachment - better (i think)
-      if (!zest.config.explicitAttachment) {
-        write("<script src='/" + zest.config.baseDir + "/require-inline.js' data-require='" + moduleId + "'></script> \n");
-        write("<script>" +
-          "$z.attach('" + _options.id + "', '" + (zest.config.dynamicAttachment ? "zest/attach!" : "") + moduleId + "', " + JSON.stringify(options) + ");" +
-        "</script>\n");
-        complete();
-      }
-      else {
-        // explicitly show attachment for debugging
-        attach.createAttachment(moduleId, function(attachDef) {
-          write("<script>" +
-            "$z.attach('" + _options.id + "', " + JSON.stringify(attachDef.requires) + ", " + "function(" + attachDef.dependencies.join(', ') + ") {\n" +
-              "return " + attachDef.definition + ";" +
-            "}" + ", " + JSON.stringify(options) + ");\n" + 
-          "</script>\n");
-          
-          complete();
-        });
-      }
-    }
-    else {
-      write("<script>" +
-        "$z.attach('" + _options.id + "', ['zest'], function($z) {\n" +
-          "return " + attach.serializeComponent(component) + ";\n" +
-        "}" + ", " + JSON.stringify(options) + ");" +
-        "</script>\n");
-      
-      complete();
-    }
+    write("<script src='" + requireInlineUrl() + "' data-require='zest," + moduleId + "'></script> \n");
+    
+    write("<script src='" + attachUrl() + "' data-zid='" + id
+          + "' data-controllerid='" + moduleId + "' data-options='" + optionsStr + "'></script> \n");
+    
+    complete();
   }
 }
 

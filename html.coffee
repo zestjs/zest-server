@@ -4,24 +4,25 @@ define
     id: null
     title: ''
     scripts: []
-    main: ''
-    structure: ''
+    render: ''
     options: {}
     requireConfig: {}
+    requireUrl: ''
+    requireMain: ''
     baseUrl: ''
   ###
   
   options:
     type: null
   
-  template: (o) -> """
+  render: (o) -> """
     <!doctype html>
     <html>
     <head>
       <meta charset='utf-8'>
       {`title`}
       <script type='text/javascript'>var require = #{JSON.stringify(o.requireConfig)};</script>
-      <script type='text/javascript' src='#{o.requireConfig.baseUrl}/require.js' data-main='#{if o.main then o.main else ''}'></script>
+      <script type='text/javascript' src='#{o.requireUrl}' data-main='#{o.requireMain}'></script>
       
       #{ "<script type='text/javascript' src='#{o.requireConfig.baseUrl}/" + script + "'></script>" for script in o.scripts }
     </head>
@@ -36,13 +37,13 @@ define
   title:
     options:
       id: null
-    template: (o) -> "<title>#{o.title}</title>"
     load: (o, done) ->
       if o.title != null
         return done()
       o.global.setTitle = (title) ->
         o.title = title
         done()
+    render: (o) -> "<title>#{o.title}</title>"
   
   body: (o) ->
     structure: o.structure
