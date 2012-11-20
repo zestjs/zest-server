@@ -75,7 +75,7 @@ function zestStart(environment, nodemon) {
       pipeStd(spawn(getBinPath('nodemon'), [localBinPath, 'start', environment], { cwd: process.cwd() }));
     }
     else
-      pipeStd(spawn(localBinPath, ['start', configPath], { cwd: process.cwd() }));
+      pipeStd(spawn(localBinPath, ['start', environment], { cwd: process.cwd() }));
   }
   else {
     //run the version of zest in the current directory (this global version of zest server)

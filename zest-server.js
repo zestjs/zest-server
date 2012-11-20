@@ -74,7 +74,7 @@ var cssDependencies = {};
 
 zest.init = function(config, environment, complete) {
   console.log('Loading Configuration');
-  if (zest.config != config)
+  if (typeof zest.config != 'object' || config != zest.config)
     zest.config = loadConfig(config, environment);
   
   console.log('Initializing RequireJS');
@@ -186,7 +186,7 @@ zest.init = function(config, environment, complete) {
         zest.config.rebuildZestLayer = false;
         zest.config.build = false;
         delete requirejs.s.contexts[zest.config.require.server.context || '_'];
-        zest.init(zest.config, complete);
+        zest.init(zest.config, environment, complete);
       });
     });
     
@@ -475,7 +475,7 @@ var setConfig = false;
 var loadConfig = function(config, environment) {
   //load configuration
   if (config == null)
-    config = process.cwd() + windows ? '\\' : '/';
+    config = process.cwd() + (windows ? '\\' : '/');
     
   if (typeof config == 'string') {
     var isDir = (!windows && config.substr(config.length - 1, 1) == '/') || (windows && config.substr(config.length - 1, 1) == '\\');
@@ -485,16 +485,17 @@ var loadConfig = function(config, environment) {
     
     //load cson if necessary
     if (isDir && fs.existsSync(path.resolve(config, 'zest.cson')) || config.substr(config.length - 4, 4) == 'cson')
-      return loadConfig(getCSONConfigFile(isDir ? path.resolve(config, 'zest.cson') : path.resolve(config)));
+      return loadConfig(getCSONConfigFile(isDir ? path.resolve(config, 'zest.cson') : path.resolve(config)), environment);
     //otherwise load config as a json file
     else
-      return loadConfig(getJSONConfigFile(isDir ? path.resolve(config, 'zest.json') : path.resolve(config)));
+      return loadConfig(getJSONConfigFile(isDir ? path.resolve(config, 'zest.json') : path.resolve(config)), environment);
   }
   
   if (setConfig)
     throw 'Configuration has already been set. Start a new server instance for alternative configuration.';
   setConfig = true;
-    
+  
+  
   function deepPrepend(a, b) {
     for (var p in b) {
       if (b[p] instanceof Array) {
@@ -514,6 +515,10 @@ var loadConfig = function(config, environment) {
   
   //provide default configurations, starting with the environment mode config
   var outConfig = config.environments[environment || config.environment];
+  
+  if (typeof outConfig == 'undefined')
+    throw 'No configuration provided for environment "' + environment + '".';
+  
   delete config.environments;
   
   deepPrepend(outConfig, config);
