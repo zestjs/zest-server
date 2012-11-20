@@ -475,7 +475,7 @@ var setConfig = false;
 var loadConfig = function(config) {
   //load configuration
   if (typeof config == 'string') {
-    var isDir = config.substr(config.length - 1, 1) == '/';
+    var isDir = config.substr(config.length - 1, 1) == '/' || config.substr(config.length - 1, 1) == '\\';
     //config file path is taken to be app directory
     defaultConfig.appDir = isDir ? path.resolve(config) : path.dirname(path.resolve(config));
     defaultConfig.require.server.paths['$'] = defaultConfig.appDir;

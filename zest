@@ -65,7 +65,7 @@ function zestStart(configPath, nodemon) {
   var configDir = isDir ? configPath : path.dirname(configPath);
   
   var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest') + (windows ? '.cmd' : '');
-  if (fs.existsSync(localBinPath) && __dirname != path.dirname(fs.realpathSync(localBinPath))) {
+  if (fs.existsSync(localBinPath) && path.resolve(__dirname, '../') != path.resolve(localBinPath, '../../')) {
     //run the local version of zest through the local bin
     console.log('Running zest server as a local module');
     //for nodemon, rerun the current script through nodemon to get monitoring
