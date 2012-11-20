@@ -72,11 +72,10 @@ var zoe, router;
 //trace css dependencies for modules to allow critical css inclusions
 var cssDependencies = {};
 
-zest.init = function(config, complete) {
-  
+zest.init = function(config, environment, complete) {
   console.log('Loading Configuration');
   if (zest.config != config)
-    zest.config = loadConfig(config);
+    zest.config = loadConfig(config, environment);
   
   console.log('Initializing RequireJS');
   zest.config.require.server.nodeRequire = require;
@@ -470,12 +469,16 @@ zest.startServer = function(port) {
   zest.require = requirejs.config(zest.config.server);
 } */
 
+var windows = process.platform == 'win32';
 var setConfig = false;
 //config is simply taken for the dirname where zest.json can be found
-var loadConfig = function(config) {
+var loadConfig = function(config, environment) {
   //load configuration
+  if (config == null)
+    config = process.cwd() + windows ? '\\' : '/';
+    
   if (typeof config == 'string') {
-    var isDir = config.substr(config.length - 1, 1) == '/' || config.substr(config.length - 1, 1) == '\\';
+    var isDir = (!windows && config.substr(config.length - 1, 1) == '/') || (windows && config.substr(config.length - 1, 1) == '\\');
     //config file path is taken to be app directory
     defaultConfig.appDir = isDir ? path.resolve(config) : path.dirname(path.resolve(config));
     defaultConfig.require.server.paths['$'] = defaultConfig.appDir;
@@ -510,7 +513,7 @@ var loadConfig = function(config) {
   deepPrepend(config, defaultConfig);
   
   //provide default configurations, starting with the environment mode config
-  var outConfig = config.environments[config.environment];
+  var outConfig = config.environments[environment || config.environment];
   delete config.environments;
   
   deepPrepend(outConfig, config);
@@ -1010,8 +1013,8 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
  * Automatically creates the http server from config only
  *
  */
-zest.createServer = function(appDir, complete) {
-  zest.init(appDir || process.cwd(), function() {
+zest.createServer = function(config, environment, complete) {
+  zest.init(config, environment, function() {
     zest.startServer();
     if (complete)
       complete();

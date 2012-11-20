@@ -57,18 +57,12 @@ function zestCreate(createPath, args) {
   pipeStd(spawn(getBinPath('volo'), ['create', createName, repo], { cwd: createDir }));
 }
 
-function zestStart(configPath, nodemon) {
-  var isDir = !configPath || configPath && configPath.substr(configPath.length - 1, 1) == (windows ? '\\' : '/');
-  configPath = configPath ? path.resolve(configPath) : process.cwd();
-  if (isDir && configPath.substr(configPath.length - 1, 1) != (windows ? '\\' : '/'))
-    configPath += (windows ? '\\' : '/');
-  var configDir = isDir ? configPath : path.dirname(configPath);
+function zestStart(environment, nodemon) {
   
-  var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest') + (windows ? '.cmd' : '');
+  var localBinPath = path.resolve(process.cwd() + (windows ? '\\' : '/'), 'node_modules/.bin/zest') + (windows ? '.cmd' : '');
   if (fs.existsSync(localBinPath)) {
     if (path.resolve(__dirname, '../') == path.resolve(localBinPath, '../../')) {
-      var zest = require('./zest-server');
-      zest.createServer(configPath);
+      require('./zest-server').createServer(null, environment);
       return;
     }
     
@@ -78,17 +72,16 @@ function zestStart(configPath, nodemon) {
     if (nodemon) {
       if (windows)
         console.log('Nodemon support for windows isnt working, contributions welcome.');
-      pipeStd(spawn(getBinPath('nodemon'), [localBinPath, 'start', configPath], { cwd: configDir }));
+      pipeStd(spawn(getBinPath('nodemon'), [localBinPath, 'start', environment], { cwd: process.cwd() }));
     }
     else
-      pipeStd(spawn(localBinPath, ['start', configPath], { cwd: configDir }));
+      pipeStd(spawn(localBinPath, ['start', configPath], { cwd: process.cwd() }));
   }
   else {
     //run the version of zest in the current directory (this global version of zest server)
     if (!fs.existsSync(localBinPath))
       console.log('Zest server not locally installed, using global install. Note that local NodeJS requires will not work.')
-    var zest = require('./zest-server');
-    zest.createServer(configPath);
+    require('./zest-server').createServer(null, environment);
   }
 }
 
