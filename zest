@@ -65,7 +65,13 @@ function zestStart(configPath, nodemon) {
   var configDir = isDir ? configPath : path.dirname(configPath);
   
   var localBinPath = path.resolve(configDir, 'node_modules/.bin/zest') + (windows ? '.cmd' : '');
-  if (fs.existsSync(localBinPath) && path.resolve(__dirname, '../') != path.resolve(localBinPath, '../../')) {
+  if (fs.existsSync(localBinPath)) {
+    if (path.resolve(__dirname, '../') == path.resolve(localBinPath, '../../')) {
+      var zest = require('./zest-server');
+      zest.createServer(configPath);
+      return;
+    }
+    
     //run the local version of zest through the local bin
     console.log('Running zest server as a local module');
     //for nodemon, rerun the current script through nodemon to get monitoring
@@ -78,8 +84,9 @@ function zestStart(configPath, nodemon) {
       pipeStd(spawn(localBinPath, ['start', configPath], { cwd: configDir }));
   }
   else {
-    //run the version of zest in the current directory (this version of zest server)
-    console.log('Zest server not locally installed, using global install. Note that local NodeJS requires will not work.')
+    //run the version of zest in the current directory (this global version of zest server)
+    if (!fs.existsSync(localBinPath))
+      console.log('Zest server not locally installed, using global install. Note that local NodeJS requires will not work.')
     var zest = require('./zest-server');
     zest.createServer(configPath);
   }
