@@ -119,7 +119,7 @@
     build: {
       map: {
         '*': {
-          '$attach': '$zest-server/attach'
+          '$attach': 'zest/attachment'
         }
       },
       paths: {},
