@@ -125,12 +125,12 @@
       paths: {},
       stubModules: [],
       zestLayer: {
-        include: ['lib/require.js', 'require-inline', 'zest/attach', '$zest-server/attach!', 'zest/zest', 'css'],
+        include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/attachment!', 'zest/zest', 'css'],
         excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
-        exclude: ['$zest-server/attach', 'coffee-script']
+        exclude: ['zest/attachment', 'coffee-script']
       },
       zestExcludes: {
-        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', '$zest-server/attach'],
+        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', 'zest/attachment'],
         excludeShallow: ['require-css/normalize'],
         exclude: []
       },
