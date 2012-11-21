@@ -72,10 +72,10 @@ function zestStart(environment, nodemon) {
     if (nodemon) {
       if (windows)
         console.log('Nodemon support for windows isnt working, contributions welcome.');
-      pipeStd(spawn(getBinPath('nodemon'), [localBinPath, 'start', environment], { cwd: process.cwd() }));
+      pipeStd(spawn(getBinPath('nodemon'), [localBinPath, 'start', environment || ''], { cwd: process.cwd() }));
     }
     else
-      pipeStd(spawn(localBinPath, ['start', environment], { cwd: process.cwd() }));
+      pipeStd(spawn(localBinPath, ['start', environment || ''], { cwd: process.cwd() }));
   }
   else {
     //run the version of zest in the current directory (this global version of zest server)

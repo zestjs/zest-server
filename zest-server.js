@@ -152,10 +152,22 @@ zest.init = function(config, environment, complete) {
       var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js');
       if (fs.existsSync(buildLayerPath))
         fs.unlinkSync(buildLayerPath);
+        
+      var zestExcludes = zest.config.require.build.zestExcludes;
+      var zestLayer = zest.config.require.build.zestLayer;
+      zest.config.require.build.modules.unshift({
+        name :'zest/excludes',
+        create: true,
+        include: zestExcludes.include.concat(zestLayer.include),
+        exclude: zestExcludes.exclude,
+        excludeShallow: zestExcludes.excludeShallow
+      });
       zest.config.require.build.modules.unshift({
         name: 'zest/build-layer',
         create: true,
-        include: ['require', 'require-inline', 'zest/zest'].concat(zest.config.zestLayerInclude),
+        include: zestLayer.include,
+        exclude: zestLayer.exclude,
+        excludeShallow: zestLayer.excludeShallow
       });
       
       var _onResourceLoad = requirejs.onResourceLoad;
@@ -633,21 +645,25 @@ zest.renderPage = function(page, res, complete) {
     page.requireConfig.config['zest/render'].typeAttribute = page.typeAttribute;
   }
   
-  page.requireUrl = page.requireUrl || '/' + zest.config.baseDir + '/require.js';
+  page.requireUrl = page.requireUrl || '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js');
   page.requireMain = page.requireMain || '';
   
   //process page layers to include the paths config
-  if (zest.builtLayers)
+  if (zest.builtLayers) {
+    ///page.layers.unshift('zest/build-layer');
     for (var i = 0; i < page.layers.length; i++) {
-      var layerName = page.layers[i];
+      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(page.layers[i])));
+      layerName = layerName.substr(0, layerName.length - 3);
       var layer = zest.builtLayers[layerName];
       if (!layer) {
+        console.log(zest.builtLayers);
         console.log('Build layer ' + layerName + ' not found for page inclusion.');
         continue;
       }
       for (var j = 0; j < layer.length; j++)
         page.requireConfig.paths[layer[j]] = layerName;
     }
+  }
   
   if (typeof page.structure == 'string')
     zest.require([page.structure], function(structure) {
@@ -775,11 +791,11 @@ var getCSSDependencies = function(component) {
 }
 
 var requireInlineUrl = function() {
-  return '/' + zest.config.baseDir + '/require-inline.js';
+  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require-inline.js');
 }
 
 var attachUrl = function() {
-  return '/' + zest.config.baseDir + '/zest/attach.js';
+  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/zest/attach.js');
 }
 
 zest.render.renderTemplate = function(template, component, options, write, complete, noDelay) {

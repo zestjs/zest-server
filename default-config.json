@@ -7,7 +7,7 @@
       build: true,
       rebuild: true,
       page: {
-        layers: [] //build layers to use in production
+        layers: ['zest/build-layer'] //build layers to use in production
       }
     },
     dev: {
@@ -117,7 +117,23 @@
     //build require config
     //when we do a build, zest core is dropped into the zest/core file
     build: {
+      map: {
+        '*': {
+          '$attach': '$zest-server/attach'
+        }
+      },
       paths: {},
+      stubModules: [],
+      zestLayer: {
+        include: ['lib/require.js', 'require-inline', 'zest/attach', '$zest-server/attach!', 'zest/zest', 'css'],
+        excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
+        exclude: ['$zest-server/attach', 'coffee-script']
+      },
+      zestExcludes: {
+        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', '$zest-server/attach'],
+        excludeShallow: ['require-css/normalize'],
+        exclude: []
+      },
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [
