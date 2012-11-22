@@ -46,5 +46,5 @@ define
     render: (o) -> "<title>#{o.title}</title>"
   
   body: (o) ->
-    structure: o.structure
+    render: o.render
     options: o.options
