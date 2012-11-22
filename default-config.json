@@ -115,7 +115,7 @@
     },
   
     //build require config
-    //when we do a build, zest core is dropped into the zest/core file
+    //when we do a build, zest core is dropped into the zest/build-layer file
     build: {
       map: {
         '*': {
@@ -123,6 +123,7 @@
         }
       },
       paths: {},
+      keepBuildDir: true, //keep build dir during runs to save reprocessing
       stubModules: [],
       zestLayer: {
         include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/attachment!', 'zest/zest', 'css'],
