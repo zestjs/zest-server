@@ -225,7 +225,7 @@ zest.init = function(config, environment, complete) {
          */
         var r = router.route(req.url);
         //null route -> skip
-        if (r.route === null)
+        if (r.route == null)
           return next();
         
         //redirect
@@ -238,7 +238,7 @@ zest.init = function(config, environment, complete) {
         req.page = {};
         
         //route object
-        if (typeof r.route == 'object')
+        if (typeof r.route == 'object' && r.route.structure)
           //clone the route defaults onto the page
           zoe.extend(req.page, r.route, {
             '*': 'DFILL',
@@ -737,8 +737,11 @@ zest.render.renderItem = function(structure, options, write, complete) {
   
   var self = this;
   
+  if (typeof structure == 'undefined' || structure === null)
+    return complete();
+  
   // string templates
-  if (typeof structure == 'string')
+  else if (typeof structure == 'string')
     self.renderTemplate(structure, null, options, write, complete);
   
   // dynamic template or structure function
@@ -767,6 +770,10 @@ zest.render.renderItem = function(structure, options, write, complete) {
   // render component
   else if (structure.render)
     self.renderComponent(structure, options, write, complete);
+  
+  // empty render component
+  else if ('render' in structure)
+    return complete();
   
   else {
     console.log(structure);
@@ -918,8 +925,11 @@ zest.render.renderComponent = function(component, options, write, complete) {
         
         // read out id and type
         var readId, readType;
+        var idMatch = chunk.match(/^[^>]*id=['"]?([^'"\s]+)/);
+        if (idMatch)
+          readId = idMatch[1];
         
-        if (_id && component.attach)
+        if (readId)
           _id = readId;
         
         // add id and type attributes as necessary
@@ -935,26 +945,28 @@ zest.render.renderComponent = function(component, options, write, complete) {
           attributes += ' id="' + _id + '"';
         }
         if (!readType && (_type != null || component.attach))
-          attributes += ' component' + (_type !== '' ? '="' + _type + '"' : '');
+          attributes += ' component' + (typeof _type == 'string' ? '="' + _type + '"' : '');
         
         chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
         
         // Run pipe immediately after labelling
         options.global._piped = options.global._piped || {};
         
-        _options = component.pipe ? component.pipe(options) || {} : {};
+        _options = component.pipe ? component.pipe(options) || {} : null;
         
         //only pipe global if a global pipe has been specially specified
         //piping the entire options global is lazy and ignored
-        if (_options.global == options.global)
-          delete _options.global;
-        else {
-          //check if we've already piped a global, and if so, don't repipe
-          for (var p in _options.global)
-            if (options.global._piped[p])
-              delete _options.global[p];
-            else
-              options.global._piped[p] = true;
+        if (_options) {
+          if (_options.global == options.global)
+            delete _options.global;
+          else {
+            //check if we've already piped a global, and if so, don't repipe
+            for (var p in _options.global)
+              if (options.global._piped[p])
+                delete _options.global[p];
+              else
+                options.global._piped[p] = true;
+          }
         }
       }
       write(chunk);
@@ -980,6 +992,8 @@ zest.render.renderComponent = function(component, options, write, complete) {
       else
         self.renderItem(structure, { global: options.global }, _write, renderAttach);
     }
+    else if (typeof component.render == 'string')
+      self.renderTemplate(component.render, component, options, _write, renderAttach);
     else
       self.renderItem(component.render, options, _write, renderAttach);
   }
@@ -1015,7 +1029,7 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
     
     write("<script src='" + requireInlineUrl() + "' data-require='zest," + attachId + "'></script> \n");
     write("<script src='" + attachUrl() + "' data-zid='" + id
-          + "' data-controllerid='" + attachId + "' data-options='" + optionsStr + "'></script> \n");
+          + "' data-controllerid='" + attachId + "'" + (optionsStr ? " data-options='" + optionsStr + "'" : "") + "></script> \n");
       
     complete();
   }
@@ -1024,7 +1038,7 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
     write("<script src='" + requireInlineUrl() + "' data-require='zest," + moduleId + "'></script> \n");
     
     write("<script src='" + attachUrl() + "' data-zid='" + id
-          + "' data-controllerid='" + moduleId + "' data-options='" + optionsStr + "'></script> \n");
+          + "' data-controllerid='" + moduleId + "'" + (optionsStr ? " data-options='" + optionsStr + "'" : "") + "></script> \n");
     
     complete();
   }
