@@ -444,7 +444,7 @@ var loadModule = function(moduleId, complete) {
           next();
       });
     if (instance.handler)
-      zest.handlers.on(function() {
+      zest.handlers.on(function(req, res, next) {
         instance.handler.apply(instance, arguments);
       });
     
