@@ -14,11 +14,11 @@ define ['require', 'zest'], (require, zest) ->
           options: o._query || {}
 
   # handle post requests to /component/moduleId, with JSON POST options
-    if (req.method != 'POST')
+  handler: (req, res, next) ->
+    if req.method != 'POST'
       return next();
 
-    var routeMatch;
-    if (!(routeMatch = req.url.match(/^\/component\/(.*)/))
+    if !(routeMatch = req.url.match /^\/component\/(.*)/)
       return next();
 
     moduleId = routeMatch[1]

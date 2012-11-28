@@ -99,6 +99,7 @@
       },
       map: {
         '*': {
+          selector: 'empty',
           jquery: 'empty'
         }
       },
