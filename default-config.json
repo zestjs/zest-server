@@ -46,11 +46,11 @@
   staticLatency: 0,
   debugInfo: false,
   
-  /* Page Rendering - default options */
-  page: {
-    //structure to render the html page with (html template effectively)
-    pageRender: 'cs!$zest-server/html',
-    
+  /* Page Rendering */
+  // structure to render the html page with (html template effectively)
+  pageTemplate: 'cs!$zest-server/html',
+  // default page render options
+  pageOptions: {
     //page options, structure and options are body structure, as set by route
     id: null,
     title: '',
@@ -99,7 +99,6 @@
       },
       map: {
         '*': {
-          selector: 'empty',
           jquery: 'empty'
         }
       },
@@ -112,6 +111,11 @@
     //client require config
     client: {
       // base url is baseUrl from base config
+      config: {
+        'zest/zest-render'; {
+          defineGlobal: true
+        }
+      }
     },
   
     //build require config

@@ -156,7 +156,7 @@ zest.init = function(config, environment, complete) {
       var zestExcludes = zest.config.require.build.zestExcludes;
       var zestLayer = zest.config.require.build.zestLayer;
       zest.config.require.build.modules.unshift({
-        name :'zest/excludes',
+        name: 'zest/excludes',
         create: true,
         include: zestExcludes.include.concat(zestLayer.include),
         exclude: zestExcludes.exclude,
@@ -214,7 +214,11 @@ zest.init = function(config, environment, complete) {
         if (req.headers.accept)
           if (!req.headers.accept.match(/text\/html/))
             return next();
-        
+
+        // if not a GET request, also skip standard routing
+        if (req.method != 'GET')
+          return next();
+
         /*
          * check the url for any routes -> populates route data onto req:
          *
@@ -224,45 +228,39 @@ zest.init = function(config, environment, complete) {
          * 
          */
         var r = router.route(req.url);
-        //null route -> skip
-        if (r.route == null)
-          return next();
-        
+
         //redirect
         if (r.redirect) {
           req.redirect = r.redirect;
           return next();
         }
+
+        //null route -> skip
+        if (r.route == null)
+          return next();
         
         //create a fresh page object
-        req.page = {};
+        req.pageOptions = {};
+
+        // set all the Zest-related page options
+        setDefaultPageOptions(req.pageOptions);
+
+        req.pageOptions.options = zoe.extend(req.pageOptions.options || {}, r.options, 'REPLACE');
         
         //route object
-        if (typeof r.route == 'object' && r.route.structure)
-          //clone the route defaults onto the page
-          zoe.extend(req.page, r.route, {
-            '*': 'DFILL',
-            'layers': 'ARR_PREPEND'
+        if (typeof r.route == 'object')
+          zoe.extend(req.pageOptions, r.route, {
+            '*': 'REPLACE',
+            'options': 'APPEND',
+            'layers': 'ARR_APPEND'
           });
         else
-          req.page.structure = r.route;
-          
-        req.page.options = req.page.options || {};
-        zoe.extend(req.page.options, r.options, 'FILL');
-        
-        //then fill in the page defaults from the config
-        zoe.extend(req.page, zest.config.page, {
-          '*': 'DFILL',
-          'layers': 'ARR_PREPEND'
-        });
-
-        //deep clone the require config, allowing page-specific variation
-        req.page.requireConfig = zoe.extend(req.page.requireConfig || {}, zest.config.require.client, 'DREPLACE');
+          req.pageOptions.structure = r.route;
         
         //lookup the module name responsible for the page route
         for (var i = 0; i < zest.modules.length; i++) {
-          if (zest.modules[i].instance.routes[req.page.options._route]) {
-            req.page.module = zest.modules[i].instance;
+          if (zest.modules[i].instance.routes[req.pageOptions.options._route]) {
+            req.pageOptions.module = zest.modules[i].instance;
             break;
           }
         }
@@ -286,11 +284,17 @@ zest.init = function(config, environment, complete) {
           return;
         }
         
-        if (!req.page || !req.page.structure)
+        if (!req.pageOptions || !req.pageOptions.structure)
           return next();
         
-        //single-argument shorthand for a page render
-        zest.renderPage(req.page, res);
+        // run the page render
+        if (typeof req.pageOptions.structure == 'string')
+          zest.require([req.pageOptions.structure], function(structure) {
+            req.pageOptions.structure = structure;
+            zest.render(req.pageTemplate || zest.config.pageTemplate, req.pageOptions, res);
+          });
+        else
+          zest.render(req.pageTemplate || zest.config.pageTemplate, req.pageOptions, res);
       });
       
       //fall through is the file server (if enabled)
@@ -312,6 +316,44 @@ zest.init = function(config, environment, complete) {
     
     makeServer(complete);
   }, reqErr);
+}
+
+var setDefaultPageOptions = function(pageOptions) {
+
+  //load it with the page defaults, cloned to allow modification
+  zoe.extend(pageOptions, zest.config.pageOptions, {
+    '*': 'DREPLACE',
+    'layers': 'ARR_APPEND',
+    'scripts': 'ARR_APPEND'
+  });
+
+  //deep clone the require config, allowing page-specific variation
+  pageOptions.requireConfig = zoe.extend(pageOptions.requireConfig || {}, zest.config.require.client, 'DREPLACE');
+
+  if (pageOptions.typeAttribute != 'component') {
+    pageOptions.requireConfig.config = pageOptions.requireConfig.config || {};
+    pageOptions.requireConfig.config['zest/render'] = pageOptions.requireConfig.config['zest/render'] || {};
+    pageOptions.requireConfig.config['zest/render'].typeAttribute = pageOptions.typeAttribute;
+  }
+  
+  pageOptions.requireUrl = pageOptions.requireUrl || '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js');
+  pageOptions.requireMain = pageOptions.requireMain || '';
+  
+  //process page layers to include the paths config
+  if (zest.builtLayers) {
+    for (var i = 0; i < pageOptions.layers.length; i++) {
+      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(page.layers[i])));
+      layerName = layerName.substr(0, layerName.length - 3);
+      var layer = zest.builtLayers[layerName];
+      if (!layer) {
+        console.log(zest.builtLayers);
+        console.log('Build layer ' + layerName + ' not found for page inclusion.');
+        continue;
+      }
+      for (var j = 0; j < layer.length; j++)
+        pageOptions.requireConfig.paths[layer[j]] = layerName;
+    }
+  }
 }
 
 /*
@@ -389,7 +431,7 @@ var loadModule = function(moduleId, complete) {
       router.addRoutes(instance.routes);
     if (instance.routeHandler)
       zest.handlers.on(function(req, res, next) {
-        if (req.page && req.page.module == instance)
+        if (req.pageOptions && req.pageOptions.module == instance)
           instance.routeHandler.apply(instance, arguments);
         else
           next();
@@ -602,6 +644,7 @@ zest.build = function(complete) {
  */
 zest.render = function(structure, options, res, complete) {
   options = options || {};
+  options.global = options.global || {};
   options.global._nextComponentId = 1;
   options.global._ids = options.global._ids || [];
 
@@ -625,54 +668,23 @@ zest.render = function(structure, options, res, complete) {
   else
     zest.render.renderItem(structure, options, _write, _complete);
 }
-/*
- * zest.renderPage
- *
- * 
- *
- */
-zest.renderPage = function(page, res, complete) {
-  //add the defaults to the page
-  zoe.extend(page, zest.config.page, {
-    '*': 'DFILL',
-    'scripts': 'ARR_PREPEND',
-    'layers': 'ARR_PREPEND'
-  })
 
-  if (page.typeAttribute != 'component') {
-    page.requireConfig.config = page.requireConfig.config || {};
-    page.requireConfig.config['zest/render'] = page.requireConfig.config['zest/render'] || {};
-    page.requireConfig.config['zest/render'].typeAttribute = page.typeAttribute;
+zest.renderPage = function(structure, options, res, complete) {
+  if (arguments.length == 2) {
+    res = options;
+    options = structure;
+    structure = zest.config.pageTemplate;
   }
-  
-  page.requireUrl = page.requireUrl || '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js');
-  page.requireMain = page.requireMain || '';
-  
-  //process page layers to include the paths config
-  if (zest.builtLayers) {
-    ///page.layers.unshift('zest/build-layer');
-    for (var i = 0; i < page.layers.length; i++) {
-      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(page.layers[i])));
-      layerName = layerName.substr(0, layerName.length - 3);
-      var layer = zest.builtLayers[layerName];
-      if (!layer) {
-        console.log(zest.builtLayers);
-        console.log('Build layer ' + layerName + ' not found for page inclusion.');
-        continue;
-      }
-      for (var j = 0; j < layer.length; j++)
-        page.requireConfig.paths[layer[j]] = layerName;
-    }
-  }
-  
-  if (typeof page.structure == 'string')
-    zest.require([page.structure], function(structure) {
-      page.structure = structure;
-      zest.render(page.pageRender, page, res, complete);
+
+  setDefaultPageOptions(options);
+
+  if (typeof options.structure == 'string')
+    zest.require([options.structure], function(_structure) {
+      options.structure = _structure;
+      zest.render(structure, options, res, complete);
     });
-  else {
-    zest.render(page.pageRender, page, res, complete);
-  }
+  else
+    zest.render(structure, options, res, complete);
 }
 
 zest.render.renderArray = function(structure, options, write, complete) {
@@ -870,7 +882,7 @@ zest.render.renderTemplate = function(template, component, options, write, compl
 var modules;  
 zest.getModuleId = function(module, definitionMatching) {
   modules = modules || requirejs.s.contexts[zest.config.require.server.context].defined;
-  
+
   var moduleId;
   if (module == null)
     return moduleId;
@@ -1013,9 +1025,9 @@ zest.render.renderComponent = function(component, options, write, complete) {
 zest.render.renderAttach = function(component, options, id, write, complete) {
   // run attachment
   var moduleId = zest.getModuleId(component);
-  
+
   if (!moduleId)
-    throw "Components need to be defined as individual module files. Module is: \n" + JSON.stringify(component);
+    throw "Dynamic components need to be defined in individual component files. Component is: \n" + JSON.stringify(component);
   
   var optionsStr = options ? JSON.stringify(options) : '';
   
