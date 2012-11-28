@@ -112,7 +112,7 @@
     client: {
       // base url is baseUrl from base config
       config: {
-        'zest/zest-render'; {
+        'zest/zest-render': {
           defineGlobal: true
         }
       }
