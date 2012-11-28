@@ -80,7 +80,7 @@ zest.init = function(config, environment, complete) {
     environment = config;
     config = null;
   }
-  
+
   if (typeof zest.config != 'object' || config != zest.config)
     zest.config = loadConfig(config, environment);
   
@@ -519,7 +519,13 @@ var loadModules = function(modules, complete) {
 zest.startServer = function(port) {
   if (!setConfig)
     throw 'Configuration hasn\'t been set to start server';
-  http.createServer(zest.server).listen(port || zest.config.port || 8080);
+  var server = http.createServer(zest.server);
+
+  port = port || zest.config.port || 8080;
+  if (!zest.config.hostname)
+    server.listen(port);
+  else
+    server.listen(port, hostname);
   console.log('Listing on port ' + (port || zest.config.port || 8080) + '...');
 }
 
