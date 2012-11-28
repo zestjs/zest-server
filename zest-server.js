@@ -74,6 +74,13 @@ var cssDependencies = {};
 
 zest.init = function(config, environment, complete) {
   console.log('Loading Configuration');
+
+  if (arguments.length == 2) {
+    complete = environment;
+    environment = config;
+    config = null;
+  }
+  
   if (typeof zest.config != 'object' || config != zest.config)
     zest.config = loadConfig(config, environment);
   
