@@ -1,21 +1,20 @@
 define ['require', 'zest'], (require, zest) ->
   routes:    
     '/component/{moduleId*}':
-      structure:
-        load: (o, render) ->
-          require [o.moduleId], (com) ->
-            o.com = com
-            render()
-          , (err) ->
-            o.com = err.toString()
-            render()
-        render: (o) ->
-          render: o.com
-          options: o._query || {}
+      load: (o, done) ->
+        require [o.moduleId], (com) ->
+          o.com = com
+          done()
+        , (err) ->
+          o.com = err.toString()
+          done()
+      body: (o) ->
+        render: o.com
+        options: o._query
 
   # handle post requests to /component/moduleId, with JSON POST options
-  handler: (req, res, next) ->
-    if req.method != 'POST'
+  globalHandler: (req, res, next) ->
+    if req.method != 'POST' && req.method != 'GET'
       return next();
 
     if !(routeMatch = req.url.match /^\/component\/(.*)/)
@@ -32,9 +31,10 @@ define ['require', 'zest'], (require, zest) ->
 
     req.on 'end', () ->
       require [moduleId], (com) ->
-        zest.renderPage JSON.parse(postData.join('')), res
+        zest.render com, JSON.parse(postData.join('')), res
       , (err) ->
-        zest.renderPage 
-          structure: err.toString()
-        , res
+        res.writeHead(404, {
+          'Content-Type': 'text/html'
+        });
+        res.end('Component not found.');
 

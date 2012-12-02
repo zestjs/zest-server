@@ -20,49 +20,16 @@
     }
   },
   
-  /* Attachment */
-  explicitAttachment: false, //show attachment object in html
-  dynamicAttachment: false, //when outside a build, generate the attach! variant client-side
-  
   /* File Server */
+  debugInfo: false,
   serveFiles: true,
   fileExpires: 500,
-  
-  /* https and spdy support */
-  https: {
-    enable: false,
-    key: ''
-  },
-  spdy: false,
-  
-  /* offline support */
-  offline: true,
-  iframeManifest: {
-    
-  },
   
   /* Page Load Testing */
   renderDelay: 0,
   staticLatency: 0,
-  debugInfo: false,
-  
-  /* Page Rendering */
-  // structure to render the html page with (html template effectively)
-  pageTemplate: 'cs!$zest-server/html',
-  // default page render options
-  pageOptions: {
-    //page options, structure and options are body structure, as set by route
-    id: null,
-    title: '',
-    scripts: [], //blocking scripts
-    layers: [], //layers to include in the current page. Used for builds to load a layer instead of the file.
-    requireMain: '',
-    //requireConfig: zest.config.client,
-    options: {},
-    global: {}, //default global options
-    
-    typeAttribute: 'component' //attribute to use for the component type
-  },
+
+  typeAttribute: 'component', //attribute to use for the component type
   
   /* Application Server */
   modules: [],
@@ -73,6 +40,22 @@
   publicBuildDir: 'www-built',
   baseDir: 'lib',
   
+
+  /* Browser module stubs */
+  browserModules: ['selector', 'jquery'],
+
+  /* base build layer */
+  zestLayer: {
+    include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/attachment!', 'zest/zest', 'css'],
+    excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
+    exclude: ['zest/attachment', 'coffee-script']
+  },
+  zestExcludes: {
+    include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', 'zest/attachment'],
+    excludeShallow: ['require-css/normalize'],
+    exclude: []
+  },
+
   require: {
     config: {
       'require-is/is': {
@@ -88,7 +71,7 @@
         http: 'rest/http'
       }
     },
-  
+
     //server require config
     server: {
       // base url is publicDir/baseUrl
@@ -96,12 +79,6 @@
       paths: {
         //'$zest-server': __dirname,
         //'$': process.cwd()
-      },
-      map: {
-        '*': {
-          selector: 'empty',
-          jquery: 'empty'
-        }
       },
       config: {
         'require-is/is': {
@@ -130,16 +107,6 @@
       paths: {},
       keepBuildDir: true, //keep build dir during runs to save reprocessing
       stubModules: [],
-      zestLayer: {
-        include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/attachment!', 'zest/zest', 'css'],
-        excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
-        exclude: ['zest/attachment', 'coffee-script']
-      },
-      zestExcludes: {
-        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', 'zest/attachment'],
-        excludeShallow: ['require-css/normalize'],
-        exclude: []
-      },
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [

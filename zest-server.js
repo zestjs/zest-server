@@ -67,7 +67,7 @@ var reqErr = function(err) {
 }
 
 //gets hooked in once config has been loaded
-var zoe, router;
+var zoe, router, Page;
 
 //trace css dependencies for modules to allow critical css inclusions
 var cssDependencies = {};
@@ -80,7 +80,7 @@ zest.init = function(config, environment, complete) {
     environment = config;
     config = null;
   }
-
+  
   if (typeof zest.config != 'object' || config != zest.config)
     zest.config = loadConfig(config, environment);
   
@@ -117,10 +117,11 @@ zest.init = function(config, environment, complete) {
   
   //requirejs
   console.log('Loading RequireJS dependencies');
-  zest.require(['zoe', 'zest/router'], function(_zoe, _router) {
+  zest.require(['zoe', 'zest/router', 'cs!$zest-server/html'], function(_zoe, _router, _html) {
     zest.baseUrl = zest.require.toUrl('.');
     zoe = _zoe;
     router = _router;
+    Page = _html;
     
     //the step function for creating the server. executed immediately after creating.
     var makeServer = zoe.fn(zoe.fn.ASYNC);
@@ -160,8 +161,8 @@ zest.init = function(config, environment, complete) {
       if (fs.existsSync(buildLayerPath))
         fs.unlinkSync(buildLayerPath);
         
-      var zestExcludes = zest.config.require.build.zestExcludes;
-      var zestLayer = zest.config.require.build.zestLayer;
+      var zestExcludes = zest.config.zestExcludes;
+      var zestLayer = zest.config.zestLayer;
       zest.config.require.build.modules.unshift({
         name: 'zest/excludes',
         create: true,
@@ -246,33 +247,22 @@ zest.init = function(config, environment, complete) {
         if (r.route == null)
           return next();
         
-        //create a fresh page object
-        req.pageOptions = {};
+        // set the page options
+        req.pageOptions = r.options;
 
-        // set all the Zest-related page options
-        setDefaultPageOptions(req.pageOptions);
-
-        req.pageOptions.options = zoe.extend(req.pageOptions.options || {}, r.options, 'REPLACE');
-        
-        //route object
-        if (typeof r.route == 'object')
-          zoe.extend(req.pageOptions, r.route, {
-            '*': 'REPLACE',
-            'options': 'APPEND',
-            'layers': 'ARR_APPEND'
-          });
-        else
-          req.pageOptions.structure = r.route;
-        
-        //lookup the module name responsible for the page route
+        //lookup the module responsible for the page route
         for (var i = 0; i < zest.modules.length; i++) {
-          if (zest.modules[i].instance.routes[req.pageOptions.options._route]) {
+          if (zest.modules[i].instance.routes[req.pageOptions._route]) {
             req.pageOptions.module = zest.modules[i].instance;
             break;
           }
         }
         
-        next();
+        // create a new page render component
+        createPage(r.route, req.pageOptions.module.page, function(com) {
+          req.pageComponent = com;
+          next();
+        });
       });
       
       //run the handlers - can alter the routing
@@ -291,17 +281,11 @@ zest.init = function(config, environment, complete) {
           return;
         }
         
-        if (!req.pageOptions || !req.pageOptions.structure)
+        if (!req.pageOptions)
           return next();
         
-        // run the page render
-        if (typeof req.pageOptions.structure == 'string')
-          zest.require([req.pageOptions.structure], function(structure) {
-            req.pageOptions.structure = structure;
-            zest.render(req.pageTemplate || zest.config.pageTemplate, req.pageOptions, res);
-          });
-        else
-          zest.render(req.pageTemplate || zest.config.pageTemplate, req.pageOptions, res);
+        // render the page
+        zest.render(req.pageComponent, req.pageOptions, res);
       });
       
       //fall through is the file server (if enabled)
@@ -325,31 +309,30 @@ zest.init = function(config, environment, complete) {
   }, reqErr);
 }
 
-var setDefaultPageOptions = function(pageOptions) {
-
-  //load it with the page defaults, cloned to allow modification
-  zoe.extend(pageOptions, zest.config.pageOptions, {
-    '*': 'DREPLACE',
-    'layers': 'ARR_APPEND',
-    'scripts': 'ARR_APPEND'
-  });
-
-  //deep clone the require config, allowing page-specific variation
-  pageOptions.requireConfig = zoe.extend(pageOptions.requireConfig || {}, zest.config.require.client, 'DREPLACE');
-
-  if (pageOptions.typeAttribute != 'component') {
-    pageOptions.requireConfig.config = pageOptions.requireConfig.config || {};
-    pageOptions.requireConfig.config['zest/render'] = pageOptions.requireConfig.config['zest/render'] || {};
-    pageOptions.requireConfig.config['zest/render'].typeAttribute = pageOptions.typeAttribute;
+/*
+ * createPage
+ *
+ * Given a partial page Render Component, populates the remaining
+ * defaults for rendering.
+ */
+var createPage = function(pageComponent, pageBase, complete) {
+  if (typeof pageComponent == 'string' && pageComponent.substr(0, 1) == '@') {
+    zest.require([pageComponent.substr(1)], function(pageComponent) {
+      createPage(pageComponent, pageBase, complete);
+    });
+    return;
   }
-  
-  pageOptions.requireUrl = pageOptions.requireUrl || '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js');
-  pageOptions.requireMain = pageOptions.requireMain || '';
+
+  // create a fresh page structure, inheriting from the page base
+  pageComponent = zoe.create([Page, {
+    requireConfig: zest.config.require.client,
+    requireUrl: '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js')
+  }].concat(pageBase ? [pageBase, pageComponent] : [pageComponent]));
   
   //process page layers to include the paths config
   if (zest.builtLayers) {
-    for (var i = 0; i < pageOptions.layers.length; i++) {
-      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(page.layers[i])));
+    for (var i = 0; i < pageComponent.layers.length; i++) {
+      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(pageComponent.layers[i])));
       layerName = layerName.substr(0, layerName.length - 3);
       var layer = zest.builtLayers[layerName];
       if (!layer) {
@@ -358,9 +341,10 @@ var setDefaultPageOptions = function(pageOptions) {
         continue;
       }
       for (var j = 0; j < layer.length; j++)
-        pageOptions.requireConfig.paths[layer[j]] = layerName;
+        pageComponent.requireConfig.paths[layer[j]] = layerName;
     }
   }
+  complete(pageComponent);
 }
 
 /*
@@ -436,16 +420,26 @@ var loadModule = function(moduleId, complete) {
     //add routes and handlers
     if (instance.routes)
       router.addRoutes(instance.routes);
-    if (instance.routeHandler)
+
+    if (instance.handler || instance.pageOptions)
       zest.handlers.on(function(req, res, next) {
-        if (req.pageOptions && req.pageOptions.module == instance)
-          instance.routeHandler.apply(instance, arguments);
-        else
+        if (!req.pageOptions)
+          return next();
+        if (req.pageOptions.module != instance)
+          return next();
+        
+        if (instance.handler)
+          instance.handler.call(instance, req, res, next);
+
+        if (instance.pageOptions) {
+          $z.extend(req.pageOptions, instance.pageOptions, 'DAPPEND');
           next();
+        }
       });
-    if (instance.handler)
+
+    if (instance.globalHandler)
       zest.handlers.on(function(req, res, next) {
-        instance.handler.apply(instance, arguments);
+        instance.globalHandler.apply(instance, arguments);
       });
     
     //store module instance info
@@ -519,14 +513,16 @@ var loadModules = function(modules, complete) {
 zest.startServer = function(port) {
   if (!setConfig)
     throw 'Configuration hasn\'t been set to start server';
-  var server = http.createServer(zest.server);
 
+  var server = http.createServer(zest.server);
+ 
   port = port || zest.config.port || 8080;
   if (!zest.config.hostname)
     server.listen(port);
   else
-    server.listen(port, hostname);
-  console.log('Listing on port ' + (port || zest.config.port || 8080) + '...');
+    server.listen(port, zest.config.hostname);
+  
+  console.log('Listening on port ' + port + (zest.config.hostname ? ', hostname ' + zest.config.hostname : '')  + '...');
 }
 
 /* zest.clearRequires = function() {
@@ -567,7 +563,7 @@ var loadConfig = function(config, environment) {
     for (var p in b) {
       if (b[p] instanceof Array) {
         a[p] = a[p] || [];
-        a[p] = a[p].concat(b[p]);
+        a[p] = b[p].concat(a[p]);
       }
       if (typeof b[p] == 'object' && b[p] !== null) {
         a[p] = a[p] || {};
@@ -609,6 +605,18 @@ var loadConfig = function(config, environment) {
   //set directories - cant override
   outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.baseDir);
   outConfig.require.client.baseUrl = '/' + outConfig.baseDir;
+
+  // auto-define 'browserModules'
+  if (outConfig.browserModules)
+    for (var i = 0; i < outConfig.browserModules.length; i++)
+      requirejs.define(outConfig.browserModules[i], function(){});
+
+  // type attribute
+  if (outConfig.typeAttribute && outConfig.typeAttribute != 'component') {
+    var clientConfig = (outConfig.require.client.config = outConfig.require.client.config || {});
+    clientConfig['zest/render'] = clientConfig['zest/render'] || {};
+    clientConfig['zest/render'].typeAttribute = outConfig.typeAttribute;
+  }
   
   return outConfig;
 }
@@ -674,30 +682,13 @@ zest.render = function(structure, options, res, complete) {
     res.write(chunk);
   }
   
-  if (typeof structure == 'string')
-    zest.require([structure], function(structure) {
-      zest.render.renderItem(structure, options, _write, _complete);
-    });
-  else
-    zest.render.renderItem(structure, options, _write, _complete);
+  zest.render.renderItem(structure, options, _write, _complete);
 }
 
 zest.renderPage = function(structure, options, res, complete) {
-  if (arguments.length == 2) {
-    res = options;
-    options = structure;
-    structure = zest.config.pageTemplate;
-  }
-
-  setDefaultPageOptions(options);
-
-  if (typeof options.structure == 'string')
-    zest.require([options.structure], function(_structure) {
-      options.structure = _structure;
-      zest.render(structure, options, res, complete);
-    });
-  else
+  createPage(structure, function(structure) {
     zest.render(structure, options, res, complete);
+  });
 }
 
 zest.render.renderArray = function(structure, options, write, complete) {
@@ -767,7 +758,12 @@ zest.render.renderItem = function(structure, options, write, complete) {
   
   // string templates
   else if (typeof structure == 'string')
-    self.renderTemplate(structure, null, options, write, complete);
+    if (structure.substr(0, 1) == '@')
+      zest.require([structure.substr(1)], function(structure) {
+        self.renderItem(structure, options, write, complete);
+      });
+    else
+      self.renderTemplate(structure, null, options, write, complete);
   
   // dynamic template or structure function
   else if (typeof structure == 'function' && !structure.render) {
@@ -837,10 +833,12 @@ zest.render.renderTemplate = function(template, component, options, write, compl
       self.renderTemplate(template, component, options, write, complete, true);
     }, zest.config.renderDelay);
   }
+
+  template = template.trim();
   
-  if (component) {
+  if (component && !zoe.inherits(component, Page)) {
     var cssIds = getCSSDependencies(component);
-    
+
     var pageCSSIds = options.global.pageCSSIds = options.global.pageCSSIds || [];
     //filter the cssIds to unique
     for (var i = 0; i < cssIds.length; i++) {
@@ -1006,21 +1004,27 @@ zest.render.renderComponent = function(component, options, write, complete) {
       
       zest.render.renderAttach(component, _options, _id, write, complete);
     }
-    
-    // check if the render is a functional
-    if (typeof component.render == 'function' && !component.render.render && component.render.length == 1) {
-      var structure = component.render(options);
-      // check if we have a template
-      if (typeof structure == 'string') {
-        self.renderTemplate(structure, component, options, _write, renderAttach);
+
+    var renderFunctional = function(structure) {
+      if (typeof structure == 'string' && structure.substr(0, 1) == '@') {
+        zest.require([structure.substr(1)], renderFunctional);
+        return;
       }
+      // functional
+      if (typeof structure == 'function' && !structure.render && structure.length == 1) {
+        structure = structure.call(component, options);
+        if (typeof structure == 'string')
+          self.renderTemplate(structure, component, options, _write, renderAttach);
+        else
+          self.renderItem(structure, { global: options.global }, _write, renderAttach);
+      }
+      else if (typeof structure == 'string')
+        self.renderTemplate(structure, component, options, _write, renderAttach);
       else
-        self.renderItem(structure, { global: options.global }, _write, renderAttach);
+        self.renderItem(structure, options, _write, renderAttach);
     }
-    else if (typeof component.render == 'string')
-      self.renderTemplate(component.render, component, options, _write, renderAttach);
-    else
-      self.renderItem(component.render, options, _write, renderAttach);
+    
+    renderFunctional(component.render);
   }
   
   if (component.load) {
