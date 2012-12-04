@@ -24,6 +24,7 @@ define ['zest', 'zest-server'], ($z, zest) ->
     requireUrl: 'REPLACE'
     requireMain: 'REPLACE'
     lang: 'REPLACE'
+    meta: 'APPEND'
 
   load: (o) ->
     o.title = @title

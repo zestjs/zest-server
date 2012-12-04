@@ -778,9 +778,9 @@ zest.render.renderItem = function(structure, options, write, complete) {
       // check if it is a template or not
       if (typeof structure == 'string')
         self.renderTemplate(structure, null, options, write, complete);
-      
+      else
       // otherwise just render
-      self.renderItem(structure, { global: options.global }, write, complete);
+        self.renderItem(structure, { global: options.global }, write, complete);
     }
   }
 
@@ -874,9 +874,11 @@ zest.render.renderTemplate = function(template, component, options, write, compl
           renderArray.splice(j + 1, 0, split[1]);
           
           // options won't have id because it is deleted 
+          var regionStructure = (component && component[regionName]) || options[regionName]
+
           renderArray.splice(j + 1, 0, {
-            render: (component && component[regionName]) || options[regionName],
-            options: options
+            render: regionStructure,
+            options: (regionStructure && regionStructure.render) ? zoe.extend({}, options) : options
           });
         }
       }
@@ -919,6 +921,9 @@ zest.render.renderComponent = function(component, options, write, complete) {
   var render = function() {
     
     options.type = options.type || component.type;
+
+    if (options.type && options.type.substr(0, 1).toUpperCase() != options.type.substr(0, 1))
+      throw 'Type names must always start with an uppercase letter.';
     
     // attach vars:
     // piped options - calculated after labelling
@@ -974,6 +979,9 @@ zest.render.renderComponent = function(component, options, write, complete) {
         
         // Run pipe immediately after labelling
         options.global._piped = options.global._piped || {};
+
+        if (component.pipe === true)
+          component.pipe = function(o) { return o }
         
         _options = component.pipe ? component.pipe(options) || {} : null;
         
