@@ -316,7 +316,7 @@ zest.init = function(config, environment, complete) {
  * defaults for rendering.
  */
 var createPage = function(pageComponent, pageBase, complete) {
-  if (typeof pageComponent == 'string' && pageComponent.substr(0, 1) == '@') {
+  if (typeof pageComponent == 'string') {
     zest.require([pageComponent.substr(1)], function(pageComponent) {
       createPage(pageComponent, pageBase, complete);
     });
