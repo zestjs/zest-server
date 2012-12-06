@@ -13,7 +13,6 @@
   "main": "./zest-server.js",
   "dependencies": {
     "requirejs": ">=2.1.0",
-    "node-static": ">=0.5.9",
     "coffee-script": ">=1.4.0",
     "csso": ">=1.3.5"
   },

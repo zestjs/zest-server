@@ -40,7 +40,7 @@
  *
  */
 var fs = require('fs'),
-  nodeStatic = require('node-static'),
+  nodeStatic = require('./node-static/node-static'),
   requirejs = require('requirejs'),
   path = require('path'),
   http = require('http');
@@ -57,8 +57,9 @@ var getCSONConfigFile = function(file) {
 }
 var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
 
-defaultConfig.require.server.paths['$zest-server'] = __dirname;
-defaultConfig.require.build.paths['$zest-server'] = __dirname;
+defaultConfig.require.server.map['*']['$render-service'] = 
+defaultConfig.require.build.map['*']['$render-service'] = 'cs!' + __dirname + '/render-service';
+defaultConfig.require.server.map['*']['$html'] = defaultConfig.require.build.map['*']['$html'] = 'cs!' + __dirname + '/html';
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -117,7 +118,7 @@ zest.init = function(config, environment, complete) {
   
   //requirejs
   console.log('Loading RequireJS dependencies');
-  zest.require(['zoe', 'zest/router', 'cs!$zest-server/html'], function(_zoe, _router, _html) {
+  zest.require(['zoe', 'zest/router', '$html'], function(_zoe, _router, _html) {
     zest.baseUrl = zest.require.toUrl('.');
     zoe = _zoe;
     router = _router;
@@ -139,7 +140,7 @@ zest.init = function(config, environment, complete) {
     zest.modules = [];
     makeServer.on(function(next) {
       if (zest.config.modules.length == 0)
-        zest.config.modules.push('cs!$zest-server/core-module');
+        zest.config.modules.push('$render-service');
       
       loadModules(zest.config.modules, next);
     });
@@ -292,14 +293,30 @@ zest.init = function(config, environment, complete) {
       zest.server.on(serveFiles);
       
       //final fall through is the zest 404, this should never be reached really
-      zest.server.on(function(req, res) {
+      zest.server.on(function(req, res, next) {
+        if (!zest.config['404'])
+          return next();
         //for some reason, a session interferes with 404 headers
         if (req.session)
           delete req.session;
+
         res.writeHead(404, {
           'Content-Type': 'text/html'
         });
-        res.end('Not a valid Url');
+
+        createPage(zest.config['404'], function(structure) {
+          zest.render.renderItem(structure, {
+            _url: req.url,
+            global: {
+              _nextComponentId: 1,
+              _ids: []
+            }
+          }, function(chunk) {
+            res.write(chunk);
+          }, function() {
+            res.end();
+          });
+        });
       });
       
       next();
@@ -316,6 +333,10 @@ zest.init = function(config, environment, complete) {
  * defaults for rendering.
  */
 var createPage = function(pageComponent, pageBase, complete) {
+  if (arguments.length == 2) {
+    complete = pageBase;
+    pageBase = undefined;
+  }
   if (typeof pageComponent == 'string') {
     zest.require([pageComponent.substr(1)], function(pageComponent) {
       createPage(pageComponent, pageBase, complete);
@@ -565,7 +586,7 @@ var loadConfig = function(config, environment) {
         a[p] = a[p] || [];
         a[p] = b[p].concat(a[p]);
       }
-      if (typeof b[p] == 'object' && b[p] !== null) {
+      else if (typeof b[p] == 'object' && b[p] !== null && a[p] !== null) {
         a[p] = a[p] || {};
         deepPrepend(a[p], b[p]);
       }
@@ -664,28 +685,67 @@ zest.build = function(complete) {
  *
  */
 zest.render = function(structure, options, res, complete) {
-  options = options || {};
-  options.global = options.global || {};
-  options.global._nextComponentId = 1;
-  options.global._ids = options.global._ids || [];
+  if (arguments.length == 2) {
+    res = options;
+    options = undefined;
+  }
+  if (arguments.length == 3 && typeof res == 'function') {
+    complete = res;
+    res = options;
+    options = undefined;
+  }
 
   res.writeHead(200, {
     'Content-Type': 'text/html'
   });
-  
-  var _complete = function() {
+
+  zest.render.renderItem(structure, zoe.extend(options || {}, {
+    global: {
+      _nextComponentId: 1,
+      _ids: []
+    }
+  }, 'DAPPEND'), function(chunk) {
+    res.write(chunk);
+  }, function() {
     res.end();
     if (complete)
       complete();
-  }
-  var _write = function(chunk) {
-    res.write(chunk);
-  }
-  
-  zest.render.renderItem(structure, options, _write, _complete);
+  });
 }
 
+/*
+zest.renderHTML = function(structure, options, complete) {
+  if (typeof options == 'function') {
+    complete = options;
+    options = undefined;
+  }
+  var html = [];
+  var res = {
+    writeHead: function(){},
+    write: function(chunk) {
+      html.push(chunk)
+    },
+    end: function(chunk){
+      if (chunk)
+        html.push(chunk);
+    }
+  }
+  zest.render(structure, options, res, function() {
+    complete(html.join(''));
+  });
+}
+*/
+
 zest.renderPage = function(structure, options, res, complete) {
+  if (arguments.length == 2) {
+    res = options;
+    options = undefined;
+  }
+  if (arguments.length == 3 && typeof res == 'function') {
+    complete = res;
+    res = options;
+    options = undefined;
+  }
   createPage(structure, function(structure) {
     zest.render(structure, options, res, complete);
   });
