@@ -204,7 +204,6 @@ zest.init = function(config, environment, complete) {
         }
         
         //clean up after build, by restarting entire init
-        zest.config.rebuildZestLayer = false;
         zest.config.build = false;
         delete requirejs.s.contexts[zest.config.require.server.context || '_'];
         zest.init(zest.config, environment, complete);
@@ -338,7 +337,7 @@ var createPage = function(pageComponent, pageBase, complete) {
     pageBase = undefined;
   }
   if (typeof pageComponent == 'string') {
-    zest.require([pageComponent.substr(1)], function(pageComponent) {
+    zest.require([pageComponent], function(pageComponent) {
       createPage(pageComponent, pageBase, complete);
     });
     return;
@@ -960,6 +959,8 @@ zest.getModuleId = function(module, definitionMatching) {
   if (module == null)
     return moduleId;
   for (var curId in modules) {
+    if (curId.substr(0, 9) == 'zest/com!')
+      continue;
     if (modules[curId] == module)
       moduleId = curId;
     else if (definitionMatching !== false && modules[curId] && module._definition == modules[curId])
