@@ -50,12 +50,12 @@
 
   /* base build layer */
   zestLayer: {
-    include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/attachment!', 'zest/zest', 'css'],
+    include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/zest', 'css'],
     excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
-    exclude: ['zest/attachment', 'coffee-script']
+    exclude: ['coffee-script']
   },
   zestExcludes: {
-    include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less', 'zest/attachment'],
+    include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less'],
     excludeShallow: ['require-css/normalize'],
     exclude: []
   },
@@ -72,7 +72,7 @@
         is: 'require-is/is',
         css: 'require-css/css',
         less: 'require-less/less',
-        com: 'zest/com'
+        com: 'zest/com',
       }
     },
 
@@ -110,12 +110,12 @@
     build: {
       map: {
         '*': {
-          '$attach': 'zest/attachment'
+          'build': 'zest/build'
         }
       },
       paths: {},
       keepBuildDir: true, //keep build dir during runs to save reprocessing
-      stubModules: [],
+      stubModules: ['zest/build'],
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [

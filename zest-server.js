@@ -115,6 +115,12 @@ zest.init = function(config, environment, complete) {
       }
     }
   }
+
+  // auto-define 'browserModules'
+  if (zest.config.browserModules)
+    for (var i = 0; i < zest.config.browserModules.length; i++)
+      requirejs.define(zest.config.browserModules[i], function(){});
+
   
   //requirejs
   console.log('Loading RequireJS dependencies');
@@ -351,6 +357,8 @@ var createPage = function(pageComponent, pageBase, complete) {
   
   //process page layers to include the paths config
   if (zest.builtLayers) {
+    pageComponent.layers = pageComponent.layers || [];
+    pageComponent.layers.unshift('zest/build-layer');
     for (var i = 0; i < pageComponent.layers.length; i++) {
       var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(pageComponent.layers[i])));
       layerName = layerName.substr(0, layerName.length - 3);
@@ -625,11 +633,6 @@ var loadConfig = function(config, environment) {
   //set directories - cant override
   outConfig.require.server.baseUrl = path.resolve(outConfig.appDir, outConfig.publicDir, outConfig.baseDir);
   outConfig.require.client.baseUrl = '/' + outConfig.baseDir;
-
-  // auto-define 'browserModules'
-  if (outConfig.browserModules)
-    for (var i = 0; i < outConfig.browserModules.length; i++)
-      requirejs.define(outConfig.browserModules[i], function(){});
 
   // type attribute
   if (outConfig.typeAttribute && outConfig.typeAttribute != 'component') {
