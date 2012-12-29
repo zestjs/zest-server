@@ -46,7 +46,7 @@
   
 
   /* Browser module stubs */
-  browserModules: ['selector', 'jquery'],
+  browserModules: ['jquery'],
 
   /* base build layer */
   zestLayer: {
@@ -73,6 +73,7 @@
         css: 'require-css/css',
         less: 'require-less/less',
         com: 'zest/com',
+        cs: 'require-coffee/cs'
       }
     },
 
