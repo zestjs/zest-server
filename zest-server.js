@@ -922,7 +922,7 @@ zest.render.renderTemplate = function(template, component, options, write, compl
   }
     
   //break up the regions into a render array
-  var regions = template.match(/\{\`\w+\`\}/g);
+  var regions = template.match(/\{\`\w+\`\}|\{\[\w+\]\}/g);
   
   if (regions) {
     // dont share type and id (already on render array)
@@ -1046,6 +1046,15 @@ zest.render.renderComponent = function(component, options, write, complete) {
 
         if (component.pipe === true)
           component.pipe = function(o) { return o }
+
+        if (component.pipe instanceof Array) {
+          var p = component.pipe;
+          var _o = {};
+          component.pipe = function(o) {
+            for (var i = 0; i < p.length; i++)
+              _o[p[i]] = o[p[i]];
+          }
+        }
         
         _options = component.pipe ? component.pipe(options) || {} : null;
         
@@ -1087,11 +1096,21 @@ zest.render.renderComponent = function(component, options, write, complete) {
         structure = structure.call(component, options);
         if (typeof structure == 'string')
           self.renderTemplate(structure, component, options, _write, renderAttach);
+        else if (component.attach) {
+          // dynamic compound component -> simple template shorthand
+          component.main = structure;
+          self.renderTemplate('<div>{[main]}</div>', component, options, _write, renderAttach);
+        }
         else
           self.renderItem(structure, { global: options.global }, _write, renderAttach);
       }
       else if (typeof structure == 'string')
         self.renderTemplate(structure, component, options, _write, renderAttach);
+      else if (component.attach) {
+        // dynamic compound component -> simple template shorthand
+        component.main = structure;
+        self.renderTemplate('<div></div>', component, options, _write, renderAttach);
+      }
       else
         self.renderItem(structure, options, _write, renderAttach);
     }
