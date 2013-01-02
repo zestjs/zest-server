@@ -1037,7 +1037,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
           attributes += ' id="' + _id + '"';
         }
         if (!readType && (_type != null || component.attach))
-          attributes += ' component' + (typeof _type == 'string' ? '="' + _type + '"' : zest.getModuleId(component, true).split('/').pop());
+          attributes += ' component' + '="' + (typeof _type == 'string' ? _type : zest.getModuleId(component, true).split('/').pop()) + '"';
         
         chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
         
