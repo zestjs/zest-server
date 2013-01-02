@@ -92,10 +92,10 @@ zest.init = function(config, environment, complete) {
   //set up css dependency tracking
   requirejs.onResourceLoad = function(context, map, depArray) {
     //coffee script -> dependency is name dependency
-    var moduleId = map.prefix == 'cs' ? map.name : map.id;
+    var moduleId = map.prefix == 'require-coffee/cs' ? map.name : map.id;
     //check each dependency for css! calls or dependencies which have css! dependencies themselves
     for (var i = 0; i < depArray.length; i++) {
-      var depId = depArray[i].prefix == 'cs' ? depArray[i].name : depArray[i].id;
+      var depId = depArray[i].prefix == 'require-coffee/cs' ? depArray[i].name : depArray[i].id;
       //dependency that might have sub-css dependencies
       if (cssDependencies[depId]) {
         cssDependencies[moduleId] = cssDependencies[moduleId] || [];
@@ -870,7 +870,7 @@ var getCSSDependencies = function(component) {
   
   if ((moduleId = zest.getModuleId(component)))
     //have a moduleId, see if we are dependent on any css
-    cssIds = cssIds.concat(cssDependencies[moduleId.substr(0, 3) == 'cs!' ? moduleId.substr(3) : moduleId] || []);
+    cssIds = cssIds.concat(cssDependencies[moduleId.substr(0, 18) == 'require-coffee/cs!' ? moduleId.substr(18) : moduleId] || []);
     
   //also add in the css for any inheritors
   if (component._definition && component._definition._implement)
