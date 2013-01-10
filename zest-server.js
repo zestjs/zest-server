@@ -58,8 +58,8 @@ var getCSONConfigFile = function(file) {
 var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
 
 defaultConfig.require.server.map['*']['$render-service'] = 
-defaultConfig.require.build.map['*']['$render-service'] = 'cs!' + __dirname + '/render-service';
-defaultConfig.require.server.map['*']['$html'] = defaultConfig.require.build.map['*']['$html'] = 'cs!' + __dirname + '/html';
+defaultConfig.require.build.map['*']['$render-service'] = 'require-coffee/cs!' + __dirname + '/render-service';
+defaultConfig.require.server.map['*']['$html'] = defaultConfig.require.build.map['*']['$html'] = 'require-coffee/cs!' + __dirname + '/html';
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -1010,6 +1010,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
     
     var _id = options.id;
     var _type = options.type;
+    var _class = component.class || '';
     
     delete options.id;
     delete options.type;
@@ -1054,7 +1055,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
         if (!readType && (_type != null || component.attach))
           attributes += ' component' + '="' + (typeof _type == 'string' ? _type : zest.getModuleId(component, true).split('/').pop()) + '"';
 
-        if (!classMatch)
+        if (!classMatch && _class)
           attributes += ' class="' + _class + '"';
         
         chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
