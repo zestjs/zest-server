@@ -868,9 +868,16 @@ var getCSSDependencies = function(component) {
   var cssIds = [];
   var moduleId;
   
-  if ((moduleId = zest.getModuleId(component)))
+  if ((moduleId = zest.getModuleId(component))) {
+    if (moduleId.substr(0, 18) == 'require-coffee/cs!')
+      moduleId = moduleId.substr(18);
+
+    if (moduleId.substr(0, 3) == 'cs!')
+      moduleId = moduleId.substr(3);
+
     //have a moduleId, see if we are dependent on any css
-    cssIds = cssIds.concat(cssDependencies[moduleId.substr(0, 18) == 'require-coffee/cs!' ? moduleId.substr(18) : moduleId] || []);
+    cssIds = cssIds.concat(cssDependencies[moduleId] || []);
+  }
     
   //also add in the css for any inheritors
   if (component._definition && component._definition._implement)
