@@ -888,6 +888,21 @@ var attachUrl = function() {
   return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/zest/attach.js');
 }
 
+/*
+ * Dotted get property function.
+ *
+ * eg 'my.property' from { my: { property: 'hello' } } returns 'hello'
+ */
+var getProperty = function(name, obj) {
+  var parts = name.split('.');
+  if (parts.length > 1) {
+    var curProperty = parts.shift();
+    return obj[curProperty] ? getProperty(parts.join('.'), obj[curProperty]) : undefined;
+  }
+  else
+    return obj[name];
+}
+
 zest.render.renderTemplate = function(template, component, options, write, complete, noDelay) {
   if (zest.config.renderDelay && !noDelay) {
     var self = this;
@@ -922,7 +937,7 @@ zest.render.renderTemplate = function(template, component, options, write, compl
   }
     
   //break up the regions into a render array
-  var regions = template.match(/\{\`\w+\`\}|\{\[\w+\]\}/g);
+  var regions = template.match(/\{\`[\w\.]+\`\}|\{\[[\w\.]+\]\}/g);
   
   if (regions) {
     // dont share type and id (already on render array)
@@ -936,7 +951,7 @@ zest.render.renderTemplate = function(template, component, options, write, compl
           renderArray.splice(j + 1, 0, split[1]);
           
           // options won't have id because it is deleted 
-          var regionStructure = (component && component[regionName]) || options[regionName]
+          var regionStructure = (component && getProperty(regionName, component)) || getProperty(regionName, options)
 
           renderArray.splice(j + 1, 0, {
             render: regionStructure,
@@ -1005,11 +1020,11 @@ zest.render.renderComponent = function(component, options, write, complete) {
     var _write = function(chunk) {
       if (labelComponent && chunk && chunk.match(/^\s*<(?!script)\w+/)) {
         labelComponent = false;
-        
-        var typeId = {
-          id: _id,
-          type: _type
-        };
+
+        var classMatch = chunk.match(/^[^>]*class=['"]?([^'"\s]+)/);
+        // update existing class in component definition
+        if (classMatch)
+          chunk = chunk.substr(0, classMatch[0].length - classMatch[1].length) + classMatch[1] + ' ' + _class + chunk.substr(classMatch[0].length);
         
         //clear space at the beginning of the html to avoid unnecessary text nodes
         chunk = chunk.replace(/^\s*/, '');
@@ -1038,6 +1053,9 @@ zest.render.renderComponent = function(component, options, write, complete) {
         }
         if (!readType && (_type != null || component.attach))
           attributes += ' component' + '="' + (typeof _type == 'string' ? _type : zest.getModuleId(component, true).split('/').pop()) + '"';
+
+        if (!classMatch)
+          attributes += ' class="' + _class + '"';
         
         chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
         
@@ -1109,7 +1127,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
       else if (component.attach) {
         // dynamic compound component -> simple template shorthand
         component.main = structure;
-        self.renderTemplate('<div></div>', component, options, _write, renderAttach);
+        self.renderTemplate('<div>{[main]}</div>', component, options, _write, renderAttach);
       }
       else
         self.renderItem(structure, options, _write, renderAttach);
