@@ -40,7 +40,7 @@
  *
  */
 var fs = require('fs'),
-  nodeStatic = require('./node-static/node-static'),
+  nodeStatic = require('node-static'),
   requirejs = require('requirejs'),
   path = require('path'),
   http = require('http');

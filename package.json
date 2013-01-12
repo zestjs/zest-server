@@ -14,7 +14,8 @@
   "dependencies": {
     "requirejs": ">=2.1.0",
     "coffee-script": ">=1.4.0",
-    "csso": ">=1.3.5"
+    "csso": ">=1.3.5",
+    "node-static": ">=0.6.7"
   },
   "bin": {
     "zest": "./zest"
