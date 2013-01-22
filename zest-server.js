@@ -226,7 +226,7 @@ zest.init = function(config, environment, complete) {
         //check the 'accept' header if given, to ensure we are rendering html
         //if not, skip routing check
         if (req.headers.accept)
-          if (!req.headers.accept.match(/text\/html/))
+          if (!req.headers.accept.match(/(text\/html)|(\*\/\*)/))
             return next();
 
         // if not a GET request, also skip standard routing
