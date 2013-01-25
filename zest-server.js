@@ -57,9 +57,9 @@ var getCSONConfigFile = function(file) {
 }
 var defaultConfig = getJSONConfigFile(path.resolve(__dirname, 'default-config.json'));
 
-defaultConfig.require.server.map['*']['$render-service'] = 
-defaultConfig.require.build.map['*']['$render-service'] = 'require-coffee/cs!' + __dirname + '/render-service';
-defaultConfig.require.server.map['*']['$html'] = defaultConfig.require.build.map['*']['$html'] = 'require-coffee/cs!' + __dirname + '/html';
+defaultConfig.require.server.map['*']['$render-service'] = 'require-coffee/cs!' + __dirname + '/render-service';
+defaultConfig.require.server.map['*']['$html'] = 'require-coffee/cs!' + __dirname + '/html';
+defaultConfig.require.server.map['*']['$trace'] = __dirname + '/trace.js';
 
 var reqErr = function(err) {
   console.dir(JSON.stringify(zest.config));
@@ -124,7 +124,7 @@ zest.init = function(config, environment, complete) {
   
   //requirejs
   console.log('Loading RequireJS dependencies');
-  zest.require(['zoe', 'zest/router', '$html'], function(_zoe, _router, _html) {
+  zest.require(['zoe', 'zest/router', '$html', '$trace'], function(_zoe, _router, _html, trace) {
     zest.baseUrl = zest.require.toUrl('.');
     zoe = _zoe;
     router = _router;
@@ -186,33 +186,81 @@ zest.init = function(config, environment, complete) {
       });
       
       var _onResourceLoad = requirejs.onResourceLoad;
-      requirejs.optimize(zest.config.require.build, function(buildResponse) {
-        console.log(buildResponse);
-        requirejs.onResourceLoad = _onResourceLoad;
-        
-        //parse the build response to save the build tree for use in layer embedding
-        buildResponse = buildResponse.substr(1, buildResponse.length - 2);
-        
-        zest.builtLayers = {};
-        
-        var defineRegEx = /define\(("([^"\\]*(\\.[^"\\]*)*)"|\'([^\'\\]*(\\.[^\'\\]*)*)\'),/g;
-        
-        var buildLayers = buildResponse.split('\n\n');
-        for (var i = 0; i < buildLayers.length; i++) {
-          var moduleName = buildLayers[i].substr(0, buildLayers[i].indexOf('\n----------------\n'));
-          if (moduleName.substr(moduleName.length - 3, 3) == '.js') {
-            //load the module file as text
-            var matches = (fs.readFileSync(path.resolve(zest.config.appDir, zest.config.publicBuildDir, moduleName)) + '').match(defineRegEx);
-            for (var j = 0; j < matches.length; j++)
-              matches[j] = matches[j].substr(8, matches[j].length - 10);
-            zest.builtLayers['/' + moduleName.substr(0, moduleName.length - 3)] = matches;
+
+      
+      var modules = zest.config.require.build.modules;
+
+      // attach resource ids are css and attachment modules
+      // these are reported by zest/com-build.js during the trace
+      var attachResourceIds = [];
+      requirejs.onZestAttachResource = function(attachId) {
+        attachResourceIds.push(attachId);
+      }
+
+      var attachBuildIds = [];
+      
+      // remove the '^!' builds from the current module
+      var setAttachBuildIds = function(module) {
+        for (var i = 0; i < module.include.length; i++) {
+          var curInclude = module.include[i];
+          if (curInclude.substr(0, 2) == '^!') {
+            module.include[i] = curInclude.substr(2);
+            attachBuildIds.push(curInclude.substr(2));
           }
         }
-        
-        //clean up after build, by restarting entire init
-        zest.config.build = false;
-        delete requirejs.s.contexts[zest.config.require.server.context || '_'];
-        zest.init(zest.config, environment, complete);
+      }
+
+      setAttachBuildIds(modules[0]);
+
+      trace(zest.config.require.build, function(module, tree, index) {
+        // update the module includes list to remove the attachBuildIds
+        for (var i = 0; i < module.include.length; i++) {
+          var curInclude = module.include[i];
+          if (attachBuildIds.indexOf(curInclude) != -1) {
+            module.include.splice(i--, 1);
+            continue;
+          }
+        }
+
+        // add the attachResourceIds to the include list
+        module.include = module.include.concat(attachResourceIds);
+
+        // prepare to track the next module
+        if (modules[index + 1]) {
+          attachResourceIds = [];
+          attachBuildIds = [];
+          setAttachBuildIds(modules[index + 1]);
+        }
+
+      }, function() {
+
+        requirejs.optimize(zest.config.require.build, function(buildResponse) {
+          console.log(buildResponse);
+          requirejs.onResourceLoad = _onResourceLoad;
+          
+          zest.builtLayers = {};
+          
+          var defineRegEx = /define\(("([^"\\]*(\\.[^"\\]*)*)"|\'([^\'\\]*(\\.[^\'\\]*)*)\'),/g;
+
+          // store the layer map for layer loading
+          for (var i = 0; i < modules.length; i++) {
+            var moduleName = modules[i].name;
+            var modulePath = modules[i]._sourcePath;
+            if (fs.existsSync(modulePath)) {
+              //load the module file as text
+              var matches = (fs.readFileSync(modulePath) + '').match(defineRegEx);
+              for (var j = 0; j < matches.length; j++)
+                matches[j] = matches[j].substr(8, matches[j].length - 10);
+              zest.builtLayers[moduleName] = matches;
+            }
+          }
+          
+          //clean up after build, by restarting entire init
+          zest.config.build = false;
+          delete requirejs.s.contexts[zest.config.require.server.context || '_'];
+          zest.init(zest.config, environment, complete);
+        });
+
       });
     });
     
@@ -360,8 +408,7 @@ var createPage = function(pageComponent, pageBase, complete) {
     pageComponent.layers = pageComponent.layers || [];
     pageComponent.layers.unshift('zest/build-layer');
     for (var i = 0; i < pageComponent.layers.length; i++) {
-      var layerName = '/' + path.relative(path.resolve(zest.config.appDir, zest.config.publicDir), path.resolve(zest.require.toUrl(pageComponent.layers[i])));
-      layerName = layerName.substr(0, layerName.length - 3);
+      var layerName = pageComponent.layers[i];
       var layer = zest.builtLayers[layerName];
       if (!layer) {
         console.log(zest.builtLayers);
