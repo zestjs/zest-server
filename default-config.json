@@ -51,7 +51,7 @@
   /* base build layer */
   zestLayer: {
     include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/zest', 'css'],
-    excludeShallow: ['require-css/css-builder', 'require-less/lessc'],
+    excludeShallow: ['require-css/css-builder', 'require-less/lessc', 'require-less/lessc-server'],
     exclude: ['coffee-script']
   },
   zestExcludes: {
@@ -109,14 +109,9 @@
     //build require config
     //when we do a build, zest core is dropped into the zest/build-layer file
     build: {
-      map: {
-        '*': {
-          'build': 'zest/build'
-        }
-      },
+      map: {'*': {} },
       paths: {},
       keepBuildDir: true, //keep build dir during runs to save reprocessing
-      stubModules: ['zest/build'],
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [

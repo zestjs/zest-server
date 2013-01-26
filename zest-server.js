@@ -164,7 +164,7 @@ zest.init = function(config, environment, complete) {
       
       //add core build layer as first module
       //delete it first if there is one
-      var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'zest/build-layer.js');
+      var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicBuildDir, zest.config.baseDir, 'zest/build-layer.js');
       if (fs.existsSync(buildLayerPath))
         fs.unlinkSync(buildLayerPath);
         
@@ -251,6 +251,12 @@ zest.init = function(config, environment, complete) {
               var matches = (fs.readFileSync(modulePath) + '').match(defineRegEx);
               for (var j = 0; j < matches.length; j++)
                 matches[j] = matches[j].substr(8, matches[j].length - 10);
+
+              // NB EXCLUDE plugins from layer maps, because currently not supported in requireJS!
+              for (var j = 0; j < matches.length; j++)
+                if (matches[j].indexOf('!') != -1)
+                  matches.splice(j--, 1);
+
               zest.builtLayers[moduleName] = matches;
             }
           }
