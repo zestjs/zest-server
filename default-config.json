@@ -4,9 +4,24 @@
   //environment-specific configs, extend base config
   environments: {
     production: {
+      production: true,
       build: true,
       page: {
         layers: ['zest/build-layer'] //build layers to use in production
+      }
+    },
+    'dev-build': {
+      production: true,
+      build: true,
+      page: {
+        layers: ['zest/build-layer']
+      },
+      require: {
+        build: {
+          optimize: 'none',
+          skipDirOptimize: true,
+          keepBuildDir: true
+        }
       }
     },
     dev: {
@@ -111,7 +126,6 @@
     build: {
       map: {'*': {} },
       paths: {},
-      keepBuildDir: true, //keep build dir during runs to save reprocessing
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [

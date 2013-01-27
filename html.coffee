@@ -25,6 +25,7 @@ define ['zest', 'zest-server'], ($z, zest) ->
     requireMain: 'REPLACE'
     lang: 'REPLACE'
     meta: 'APPEND'
+    footer: 'APPEND'
 
   load: (o) ->
     o.title = @title
@@ -52,6 +53,7 @@ define ['zest', 'zest-server'], ($z, zest) ->
       #{ "<script type='text/javascript' src='#{@requireConfig.baseUrl}/" + $z.esc(script, 'url') + "'></script>" for script in @scripts }
     </head>
     <body>{`body`}</body>
+    {`footer`}
     </html>
     """
   

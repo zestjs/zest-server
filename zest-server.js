@@ -1,7 +1,19 @@
 /*
- * Zest Server
- *
+ * ZestJS Server
+ * http://zestjs.org
  * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 /*
@@ -153,7 +165,7 @@ zest.init = function(config, environment, complete) {
     
     //build the app if necessary -> restarts load again (includes core build again)
     makeServer.on(function(next) {
-      if (!zest.config.build || zest.builtLayers)
+      if (!zest.config.build)
         return next();
         
       console.log('Building whole project');
@@ -235,42 +247,56 @@ zest.init = function(config, environment, complete) {
       }, function() {
 
         requirejs.optimize(zest.config.require.build, function(buildResponse) {
+
           console.log(buildResponse);
           requirejs.onResourceLoad = _onResourceLoad;
-          
-          zest.builtLayers = {};
-          
-          var defineRegEx = /define\(("([^"\\]*(\\.[^"\\]*)*)"|\'([^\'\\]*(\\.[^\'\\]*)*)\'),/g;
-
-          // store the layer map for layer loading
-          for (var i = 0; i < modules.length; i++) {
-            var moduleName = modules[i].name;
-            var modulePath = modules[i]._sourcePath;
-            if (fs.existsSync(modulePath)) {
-              //load the module file as text
-              var matches = (fs.readFileSync(modulePath) + '').match(defineRegEx);
-              for (var j = 0; j < matches.length; j++)
-                matches[j] = matches[j].substr(8, matches[j].length - 10);
-
-              // NB EXCLUDE plugins from layer maps, because currently not supported in requireJS!
-              for (var j = 0; j < matches.length; j++)
-                if (matches[j].indexOf('!') != -1)
-                  matches.splice(j--, 1);
-
-              zest.builtLayers[moduleName] = matches;
-            }
-          }
-          
+                    
           //clean up after build, by restarting entire init
           zest.config.build = false;
           delete requirejs.s.contexts[zest.config.require.server.context || '_'];
           zest.init(zest.config, environment, complete);
+
+        }, function(err) {
+          throw err;
         });
 
       });
     });
+
+    // analyse build for layers and run
+    makeServer.on(function(next) {
+      
+      if (!zest.config.production)
+        return next();
+
+      var modules = zest.config.require.build.modules;
+
+      zest.builtLayers = {};
+      
+      var defineRegEx = /define\(("([^"\\]*(\\.[^"\\]*)*)"|\'([^\'\\]*(\\.[^\'\\]*)*)\'),/g;
+
+      // store the layer map for layer loading
+      for (var i = 0; i < modules.length; i++) {
+        var moduleName = modules[i].name;
+        var modulePath = modules[i]._sourcePath;
+        if (fs.existsSync(modulePath)) {
+          //load the module file as text
+          var matches = (fs.readFileSync(modulePath) + '').match(defineRegEx);
+          for (var j = 0; j < matches.length; j++)
+            matches[j] = matches[j].substr(8, matches[j].length - 10);
+
+          // NB EXCLUDE plugins from layer maps, because currently not supported in requireJS!
+          for (var j = 0; j < matches.length; j++)
+            if (matches[j].indexOf('!') != -1)
+              matches.splice(j--, 1);
+
+          zest.builtLayers[moduleName] = matches;
+        }
+      }
+
+    });
     
-    //create server
+    // create server
     makeServer.on(function(next) {
       console.log('Creating server');
       
@@ -1059,21 +1085,19 @@ zest.render.renderComponent = function(component, options, write, complete) {
   
   var render = function() {
     
-    options.type = options.type || component.type;
-
-    if (options.type && options.type.substr(0, 1).toUpperCase() != options.type.substr(0, 1))
-      throw 'Type names must always start with an uppercase letter.';
-    
     // attach vars:
     // piped options - calculated after labelling
     var _options;
     
     var _id = options.id;
-    var _type = options.type;
+    var _type = component.type;
     var _class = component.class || '';
+
+    if (_type && _type.substr(0, 1).toUpperCase() != _type.substr(0, 1))
+      throw 'Type names must always start with an uppercase letter.';
+
     
     delete options.id;
-    delete options.type;
     
     var labelComponent = false;
     if (component.attach || _type || _id)
