@@ -63,18 +63,6 @@
   /* Browser module stubs */
   browserModules: ['jquery'],
 
-  /* base build layer */
-  zestLayer: {
-    include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/zest', 'css'],
-    excludeShallow: ['require-css/css-builder', 'require-less/lessc', 'require-less/lessc-server'],
-    exclude: ['coffee-script']
-  },
-  zestExcludes: {
-    include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less'],
-    excludeShallow: ['require-css/normalize'],
-    exclude: []
-  },
-
   require: {
     config: {
       'require-is/is': {
@@ -129,7 +117,18 @@
       // baseUrl is ., appDir is publicDir/libDir/, dir is publicDir/libBuildDir/
       //set automatically. name, out ignored.
       modules: [
-      ]
+      ],
+      /* base build layer */
+      zestLayer: {
+        include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/zest', 'css'],
+        excludeShallow: ['require-css/css-builder', 'require-less/lessc', 'require-less/lessc-server'],
+        exclude: ['coffee-script']
+      },
+      zestExcludes: {
+        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less'],
+        excludeShallow: ['require-css/normalize'],
+        exclude: []
+      }
     }
   }
 }

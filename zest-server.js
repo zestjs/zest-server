@@ -180,8 +180,8 @@ zest.init = function(config, environment, complete) {
       if (fs.existsSync(buildLayerPath))
         fs.unlinkSync(buildLayerPath);
         
-      var zestExcludes = zest.config.zestExcludes;
-      var zestLayer = zest.config.zestLayer;
+      var zestExcludes = zest.config.require.build.zestExcludes;
+      var zestLayer = zest.config.require.build.zestLayer;
       zest.config.require.build.modules.unshift({
         name: 'zest/excludes',
         create: true,
@@ -293,6 +293,8 @@ zest.init = function(config, environment, complete) {
           zest.builtLayers[moduleName] = matches;
         }
       }
+
+      next();
 
     });
     
