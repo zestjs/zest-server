@@ -1093,13 +1093,21 @@ zest.render.renderComponent = function(component, options, write, complete) {
     
     var _id = options.id;
     var _type = component.type;
-    var _class = (component.className || '') + (options.className && component.className ? ' ' + options.className : options.className || '');
+    var _class = component.className + (options.className && component.className ? ' ' + options.className : options.className || '');
+
+    if (!_id && (component.attach || component.style)) {
+      _id = _id || ('z' + options.global._nextComponentId++);
+      if (options.global._ids.indexOf(_id) != -1)
+        throw 'Id: ' + _id + ' has already got an attachment.';
+      
+      options.global._ids.push(_id);
+    }
+
+    if (component.style)
+      write('<style data-zid="' + _id + '">\n' + (typeof component.style == 'function' ? component.style(options) : component.style) + '\n</style>')
 
     if (_type && _type.substr(0, 1).toUpperCase() != _type.substr(0, 1))
       throw 'Type names must always start with an uppercase letter.';
-
-    
-    delete options.id;
     
     var labelComponent = false;
     if (component.attach || _type || _id)
@@ -1116,29 +1124,13 @@ zest.render.renderComponent = function(component, options, write, complete) {
         //clear space at the beginning of the html to avoid unnecessary text nodes
         chunk = chunk.replace(/^\s*/, '');
         var firstTag = chunk.match(/<\w+/);
-        
-        // read out id and type
-        var readId, readType;
-        var idMatch = chunk.match(/^[^>]*id=['"]?([^'"\s]+)/);
-        if (idMatch)
-          readId = idMatch[1];
-        
-        if (readId)
-          _id = readId;
-        
+                
         // add id and type attributes as necessary
         var attributes = '';
-        if (!readId && (_id || component.attach)) {
-          _id = _id || ('z' + options.global._nextComponentId++);
-          
-          if (options.global._ids.indexOf(_id) != -1)
-            throw 'Id: ' + _id + ' has already got an attachment.';
-          
-          options.global._ids.push(_id);
-          
+        if (_id)
           attributes += ' id="' + _id + '"';
-        }
-        if (!readType && (_type != null || component.attach))
+        
+        if (_type != null || component.attach)
           attributes += ' component' + '="' + (typeof _type == 'string' ? _type : zest.getModuleId(component, true).split('/').pop()) + '"';
 
         if (!classMatch && _class)
