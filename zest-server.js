@@ -1252,7 +1252,8 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
     // normalize the attachment id
     var attachId = context.makeModuleMap(component.attach, parentMap, false, true).id;
     
-    write("<script src='" + requireInlineUrl() + "' data-require='zest," + attachId + "'></script> \n");
+    if (!component.attachAsync)
+      write("<script src='" + requireInlineUrl() + "' data-require='zest," + attachId + "'></script> \n");
     write("<script src='" + attachUrl() + "' data-zid='" + id
           + "' data-controllerid='" + attachId + "'" + (optionsStr ? " data-options='" + optionsStr + "'" : "") + "></script> \n");
       
@@ -1260,7 +1261,8 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
   }
   // separate attachment
   else {
-    write("<script src='" + requireInlineUrl() + "' data-require='zest," + moduleId + "'></script> \n");
+    if (!component.attachAsync)
+      write("<script src='" + requireInlineUrl() + "' data-require='zest," + moduleId + "'></script> \n");
     
     write("<script src='" + attachUrl() + "' data-zid='" + id
           + "' data-controllerid='" + moduleId + "'" + (optionsStr ? " data-options='" + optionsStr + "'" : "") + "></script> \n");
