@@ -1093,7 +1093,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
     
     var _id = options.id;
     var _type = component.type;
-    var _class = component.class || '';
+    var _class = component.className + (options.className && component.className ? ' ' + options.className : options.className || '');
 
     if (_type && _type.substr(0, 1).toUpperCase() != _type.substr(0, 1))
       throw 'Type names must always start with an uppercase letter.';
