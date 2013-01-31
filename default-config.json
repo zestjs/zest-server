@@ -121,11 +121,11 @@
       /* base build layer */
       zestLayer: {
         include: ['lib/require.js', 'require-inline', 'zest/attach', 'zest/zest', 'css'],
-        excludeShallow: ['require-css/css-builder', 'require-less/lessc', 'require-less/lessc-server'],
-        exclude: ['coffee-script']
+        excludeShallow: ['require-css/css-builder'],
+        exclude: []
       },
       zestExcludes: {
-        include: ['require-css/css-builder', 'require-less/lessc', 'coffee-script', 'cs', 'require-less/less'],
+        include: ['require-css/css-builder'],
         excludeShallow: ['require-css/normalize'],
         exclude: []
       }

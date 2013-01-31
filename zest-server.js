@@ -182,6 +182,22 @@ zest.init = function(config, environment, complete) {
         
       var zestExcludes = zest.config.require.build.zestExcludes;
       var zestLayer = zest.config.require.build.zestLayer;
+
+      // add coffeescript excludes
+      if (fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'coffee-script.js'))) {
+        zestExcludes.include.push('coffee-script');
+        zestExcludes.include.push('cs');
+        zestLayer.exclude.push('coffee-script');
+      }
+
+      // add require-less excludes
+      if (fs.existsSync(path.resolve(zest.config.appDir, zest.config.publicDir, zest.config.baseDir, 'require-less/less.js'))) {
+        zestExcludes.include.push('require-less/less');
+        zestExcludes.include.push('require-less/lessc');
+        zestLayer.excludeShallow.push('require-less/lessc');
+        zestLayer.excludeShallow.push('require-less/lessc-server');
+      }
+
       zest.config.require.build.modules.unshift({
         name: 'zest/excludes',
         create: true,
