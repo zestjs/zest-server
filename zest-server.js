@@ -1086,6 +1086,8 @@ zest.render.renderComponent = function(component, options, write, complete) {
   // populate default options
   if (component.options)
     for (var option in component.options) {
+      // id cannot be a default option (to set, populate html)
+      if (option == 'id') continue;
       if (options[option] === undefined)
         options[option] = component.options[option];
     }
@@ -1099,8 +1101,7 @@ zest.render.renderComponent = function(component, options, write, complete) {
     var _options;
     
     var _id = options.id;
-    var _type = component.type;
-    var _class = component.className + (options.className && component.className ? ' ' + options.className : options.className || '');
+    var _class = (component.className || '') + (options.className && component.className ? ' ' + options.className : options.className || '');
 
     if (!_id && (component.attach || component.style)) {
       _id = _id || ('z' + options.global._nextComponentId++);
@@ -1108,77 +1109,75 @@ zest.render.renderComponent = function(component, options, write, complete) {
         throw 'Id: ' + _id + ' has already got an attachment.';
       
       options.global._ids.push(_id);
+      options.id = _id;
     }
 
     if (component.style)
       write('<style data-zid="' + _id + '">\n' + (typeof component.style == 'function' ? component.style(options) : component.style) + '\n</style>')
-
-    if (_type && _type.substr(0, 1).toUpperCase() != _type.substr(0, 1))
-      throw 'Type names must always start with an uppercase letter.';
     
-    var labelComponent = false;
-    if (component.attach || _type || _id)
-      labelComponent = true;
-    var _write = function(chunk) {
-      if (labelComponent && chunk && chunk.match(/^\s*<(?!script)\w+/)) {
-        labelComponent = false;
+    var labelComponent = !!(_id || _class);
 
-        var classMatch = chunk.match(/^[^>]*class=['"]?([^'"\s]+)/);
-        // update existing class in component definition
-        if (classMatch)
-          chunk = chunk.substr(0, classMatch[0].length - classMatch[1].length) + classMatch[1] + ' ' + _class + chunk.substr(classMatch[0].length);
-        
-        //clear space at the beginning of the html to avoid unnecessary text nodes
-        chunk = chunk.replace(/^\s*/, '');
-        var firstTag = chunk.match(/<\w+/);
-                
-        // add id and type attributes as necessary
-        var attributes = '';
-        if (_id)
-          attributes += ' id="' + _id + '"';
-        
-        if (_type != null || component.attach)
-          attributes += ' component' + '="' + (typeof _type == 'string' ? _type : zest.getModuleId(component, true).split('/').pop()) + '"';
+    if (labelComponent);
+      var _write = function(chunk) {
+        if (labelComponent && chunk && chunk.match(/^\s*<(?!script)\w+/)) {
+          labelComponent = false;
 
-        if (!classMatch && _class)
-          attributes += ' class="' + _class + '"';
-        
-        chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
-        
-        // Run pipe immediately after labelling
-        options.global._piped = options.global._piped || {};
+          var classMatch = chunk.match(/^[^>]*class=['"]?([^'"\s]+)/);
+          // update existing class in component definition
+          if (classMatch)
+            chunk = chunk.substr(0, classMatch[0].length - classMatch[1].length) + (classMatch[1] || '') + (classMatch[1] && _class ? ' ' : '') + (_class || '') + chunk.substr(classMatch[0].length);
+          
+          //clear space at the beginning of the html to avoid unnecessary text nodes
+          chunk = chunk.replace(/^\s*/, '');
+          var firstTag = chunk.match(/<\w+/);
+                  
+          // add id and type attributes as necessary
+          var attributes = '';
+          if (_id)
+            attributes += ' id="' + _id + '"';
+          
+          if (component.attach)
+            attributes += ' component';
 
-        if (component.pipe === true)
-          component.pipe = function(o) { return o }
+          if (!classMatch && _class)
+            attributes += ' class="' + _class + '"';
+          
+          chunk = chunk.substr(0, firstTag[0].length) + attributes + chunk.substr(firstTag[0].length);
+          
+          // Run pipe immediately after labelling
+          options.global._piped = options.global._piped || {};
 
-        if (component.pipe instanceof Array) {
-          var p = component.pipe;
-          var _o = {};
-          component.pipe = function(o) {
-            for (var i = 0; i < p.length; i++)
-              _o[p[i]] = o[p[i]];
+          if (component.pipe === true)
+            component.pipe = function(o) { return o }
+
+          if (component.pipe instanceof Array) {
+            var p = component.pipe;
+            var _o = {};
+            component.pipe = function(o) {
+              for (var i = 0; i < p.length; i++)
+                _o[p[i]] = o[p[i]];
+            }
+          }
+          
+          _options = component.pipe ? component.pipe(options) || {} : null;
+          
+          //only pipe global if a global pipe has been specially specified
+          //piping the entire options global is lazy and ignored
+          if (_options) {
+            if (_options.global == options.global)
+              delete _options.global;
+            else {
+              //check if we've already piped a global, and if so, don't repipe
+              for (var p in _options.global)
+                if (options.global._piped[p])
+                  delete _options.global[p];
+                else
+                  options.global._piped[p] = true;
+            }
           }
         }
-        
-        _options = component.pipe ? component.pipe(options) || {} : null;
-        
-        //only pipe global if a global pipe has been specially specified
-        //piping the entire options global is lazy and ignored
-        if (_options) {
-          if (_options.global == options.global)
-            delete _options.global;
-          else {
-            //check if we've already piped a global, and if so, don't repipe
-            for (var p in _options.global)
-              if (options.global._piped[p])
-                delete _options.global[p];
-              else
-                options.global._piped[p] = true;
-          }
-        }
+        write(chunk);
       }
-      write(chunk);
-    }
     
     var renderAttach = function() {
       if (labelComponent)
@@ -1199,24 +1198,24 @@ zest.render.renderComponent = function(component, options, write, complete) {
       if (typeof structure == 'function' && !structure.render && structure.length == 1) {
         structure = structure.call(component, options);
         if (typeof structure == 'string')
-          self.renderTemplate(structure, component, options, _write, renderAttach);
+          self.renderTemplate(structure, component, options, labelComponent ? _write : write, renderAttach);
         else if (component.attach) {
           // dynamic compound component -> simple template shorthand
           component.main = structure;
-          self.renderTemplate('<div>{[main]}</div>', component, options, _write, renderAttach);
+          self.renderTemplate('<div>{[main]}</div>', component, options, labelComponent ? _write : write, renderAttach);
         }
         else
-          self.renderItem(structure, { global: options.global }, _write, renderAttach);
+          self.renderItem(structure, { global: options.global }, labelComponent ? _write : write, renderAttach);
       }
       else if (typeof structure == 'string')
-        self.renderTemplate(structure, component, options, _write, renderAttach);
+        self.renderTemplate(structure, component, options, labelComponent ? _write : write, renderAttach);
       else if (component.attach) {
         // dynamic compound component -> simple template shorthand
         component.main = structure;
-        self.renderTemplate('<div>{[main]}</div>', component, options, _write, renderAttach);
+        self.renderTemplate('<div>{[main]}</div>', component, options, labelComponent ? _write : write, renderAttach);
       }
       else
-        self.renderItem(structure, options, _write, renderAttach);
+        self.renderItem(structure, options, labelComponent ? _write : write, renderAttach);
     }
     
     renderFunctional(component.render);
