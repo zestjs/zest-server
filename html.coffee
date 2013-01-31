@@ -20,11 +20,12 @@ define ['zest', 'zest-server'], ($z, zest) ->
 
     title: 'REPLACE'
     scripts: 'ARR_APPEND'
+    css: 'REPLACE'
     requireConfig: 'DAPPEND'
     requireUrl: 'REPLACE'
     requireMain: 'REPLACE'
     lang: 'REPLACE'
-    meta: 'APPEND'
+    head: 'ARR_APPEND'
     footer: 'APPEND'
 
   load: (o) ->
@@ -46,11 +47,10 @@ define ['zest', 'zest-server'], ($z, zest) ->
       <meta charset="utf-8">
       <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
       {`titleRegion`}
-      {`meta`}
+      {`head`}
       <script type='text/javascript'>var require = #{JSON.stringify(@requireConfig)};</script>
       <script type='text/javascript' src='#{@requireUrl}' data-main='#{@requireMain}'></script>
-      
-      #{ "<script type='text/javascript' src='#{@requireConfig.baseUrl}/" + $z.esc(script, 'url') + "'></script>" for script in @scripts }
+      #{ ("<script type='text/javascript' src='#{@requireConfig.baseUrl}/" + $z.esc(script, 'url') + "'></script>" for script in @scripts).join('') }
     </head>
     <body>{`body`}</body>
     {`footer`}
@@ -58,7 +58,7 @@ define ['zest', 'zest-server'], ($z, zest) ->
     """
   
   ###
-    Deferred Title Support
+    Deferred Title Support (currently considering depreciating)
     - If this.title != null, the title is directly rendered into the template as text.
     - If this.title == null, then a global option o.global.setTitle is created
     - The title region will block page rendering until o.global.setTitle is called.

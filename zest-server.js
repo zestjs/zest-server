@@ -194,7 +194,8 @@ zest.init = function(config, environment, complete) {
         create: true,
         include: zestLayer.include,
         exclude: zestLayer.exclude,
-        excludeShallow: zestLayer.excludeShallow
+        excludeShallow: zestLayer.excludeShallow,
+        separateCSS: zestLayer.separateCSS
       });
       
       var _onResourceLoad = requirejs.onResourceLoad;
@@ -451,6 +452,12 @@ var createPage = function(pageComponent, pageBase, complete) {
       }
       for (var j = 0; j < layer.length; j++)
         pageComponent.requireConfig.paths[layer[j]] = layerName;
+    }
+
+    // if separate CSS, include as link tag
+    if (zest.config.require.build.zestLayer.separateCSS) {
+      pageComponent.meta = pageComponent.meta || [];
+      pageComponent.meta.push('<link rel="stylesheet" href="/' + zest.config.baseDir + '/zest/layer.css"></link>');
     }
   }
   complete(pageComponent);
