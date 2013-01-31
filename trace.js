@@ -74,6 +74,7 @@ define(function() {
         requirePatch();
         
         // prepare the configuration for the trace dependencies function
+        config.dir = config.appDir;
         config = build.createConfig(config);
 
         // add the configuration
