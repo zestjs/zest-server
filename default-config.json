@@ -7,14 +7,14 @@
       production: true,
       build: true,
       page: {
-        layers: ['zest/build-layer'] //build layers to use in production
+        layers: ['zest/layer'] //build layers to use in production
       }
     },
     'dev-build': {
       production: true,
       build: true,
       page: {
-        layers: ['zest/build-layer']
+        layers: ['zest/layer']
       },
       require: {
         build: {
@@ -110,7 +110,7 @@
     },
   
     //build require config
-    //when we do a build, zest core is dropped into the zest/build-layer file
+    //when we do a build, zest core is dropped into the zest/layer file
     build: {
       map: {'*': {} },
       paths: {},

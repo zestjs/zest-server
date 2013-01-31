@@ -176,7 +176,7 @@ zest.init = function(config, environment, complete) {
       
       //add core build layer as first module
       //delete it first if there is one
-      var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicBuildDir, zest.config.baseDir, 'zest/build-layer.js');
+      var buildLayerPath = path.resolve(zest.config.appDir, zest.config.publicBuildDir, zest.config.baseDir, 'zest/layer.js');
       if (fs.existsSync(buildLayerPath))
         fs.unlinkSync(buildLayerPath);
         
@@ -185,12 +185,12 @@ zest.init = function(config, environment, complete) {
       zest.config.require.build.modules.unshift({
         name: 'zest/excludes',
         create: true,
-        include: zestExcludes.include.concat(zestLayer.include),
+        include: zestExcludes.include,
         exclude: zestExcludes.exclude,
         excludeShallow: zestExcludes.excludeShallow
       });
       zest.config.require.build.modules.unshift({
-        name: 'zest/build-layer',
+        name: 'zest/layer',
         create: true,
         include: zestLayer.include,
         exclude: zestLayer.exclude,
@@ -434,13 +434,13 @@ var createPage = function(pageComponent, pageBase, complete) {
   // create a fresh page structure, inheriting from the page base
   pageComponent = zoe.create([Page, {
     requireConfig: zest.config.require.client,
-    requireUrl: '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require.js')
+    requireUrl: '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/layer.js' : '/require.js')
   }].concat(pageBase ? [pageBase, pageComponent] : [pageComponent]));
   
   //process page layers to include the paths config
   if (zest.builtLayers) {
     pageComponent.layers = pageComponent.layers || [];
-    pageComponent.layers.unshift('zest/build-layer');
+    pageComponent.layers.unshift('zest/layer');
     for (var i = 0; i < pageComponent.layers.length; i++) {
       var layerName = pageComponent.layers[i];
       var layer = zest.builtLayers[layerName];
@@ -969,11 +969,11 @@ var getCSSDependencies = function(component) {
 }
 
 var requireInlineUrl = function() {
-  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/require-inline.js');
+  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/layer.js' : '/require-inline.js');
 }
 
 var attachUrl = function() {
-  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/build-layer.js' : '/zest/attach.js');
+  return '/' + zest.config.baseDir + (zest.builtLayers ? '/zest/layer.js' : '/zest/attach.js');
 }
 
 /*
@@ -1244,7 +1244,7 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
     // normalize the attachment id
     var attachId = context.makeModuleMap(component.attach, parentMap, false, true).id;
     
-    if (!component.attachAsync)
+    if (!component.progressive)
       write("<script src='" + requireInlineUrl() + "' data-require='zest," + attachId + "'></script> \n");
     write("<script src='" + attachUrl() + "' data-zid='" + id
           + "' data-controllerid='" + attachId + "'" + (optionsStr ? " data-options='" + optionsStr + "'" : "") + "></script> \n");
@@ -1253,7 +1253,7 @@ zest.render.renderAttach = function(component, options, id, write, complete) {
   }
   // separate attachment
   else {
-    if (!component.attachAsync)
+    if (!component.progressive)
       write("<script src='" + requireInlineUrl() + "' data-require='zest," + moduleId + "'></script> \n");
     
     write("<script src='" + attachUrl() + "' data-zid='" + id
