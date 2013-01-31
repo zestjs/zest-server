@@ -241,7 +241,7 @@ zest.init = function(config, environment, complete) {
 
       setAttachBuildIds(modules[0]);
 
-      var buildClone = zoe.extend({}, zest.config.require.build, 'DAPPEND');
+      var buildClone = zoe.extend({}, zest.config.require.build, 'DREPLACE');
 
       trace(buildClone, function(module, tree, index) {
         // update the module includes list to remove the attachBuildIds
@@ -474,8 +474,8 @@ var createPage = function(pageComponent, pageBase, complete) {
 
     // if separate CSS, include as link tag
     if (zest.config.require.build.zestLayer.separateCSS) {
-      pageComponent.meta = pageComponent.meta || [];
-      pageComponent.meta.push('<link rel="stylesheet" href="/' + zest.config.baseDir + '/zest/layer.css"></link>');
+      pageComponent.head = pageComponent.head || [];
+      pageComponent.head.push('<link rel="stylesheet" href="/' + zest.config.baseDir + '/zest/layer.css"></link>');
     }
   }
   complete(pageComponent);
