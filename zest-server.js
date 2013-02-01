@@ -243,7 +243,9 @@ zest.init = function(config, environment, complete) {
 
       var buildClone = zoe.extend({}, zest.config.require.build, 'DREPLACE');
 
-      trace(buildClone, function(module, tree, index) {
+      trace(buildClone, function(_module, tree, index) {
+        var module = modules[index];
+
         // update the module includes list to remove the attachBuildIds
         for (var i = 0; i < module.include.length; i++) {
           var curInclude = module.include[i];
