@@ -297,7 +297,7 @@ zest.init = function(config, environment, complete) {
       // store the layer map for layer loading
       for (var i = 0; i < modules.length; i++) {
         var moduleName = modules[i].name;
-        var modulePath = modules[i]._sourcePath;
+        var modulePath = path.resolve(zest.config.appDir, zest.config.publicBuildDir, zest.config.baseDir, modules[i].name + '.js');
         if (fs.existsSync(modulePath)) {
           //load the module file as text
           var matches = (fs.readFileSync(modulePath) + '').match(defineRegEx);
