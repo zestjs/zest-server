@@ -1137,6 +1137,9 @@ zest.render.renderComponent = function(component, options, write, complete) {
     if (component.style)
       write('<style data-zid="' + _id + '">\n' + (typeof component.style == 'function' ? component.style(options) : component.style) + '\n</style>')
     
+    
+    delete options.id;
+    delete options.className;
     var labelComponent = !!(_id || _class);
 
     if (labelComponent);
