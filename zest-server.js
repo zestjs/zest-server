@@ -106,6 +106,8 @@ zest.init = function(config, environment, complete) {
     //coffee script -> dependency is name dependency
     var moduleId = map.prefix == 'require-coffee/cs' ? map.name : map.id;
     //check each dependency for css! calls or dependencies which have css! dependencies themselves
+    if (!depArray)
+      return;
     for (var i = 0; i < depArray.length; i++) {
       var depId = depArray[i].prefix == 'require-coffee/cs' ? depArray[i].name : depArray[i].id;
       //dependency that might have sub-css dependencies
